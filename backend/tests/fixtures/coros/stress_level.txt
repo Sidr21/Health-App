@@ -1,0 +1,16 @@
+"Stress Level — Last 2 days
+========================
+
+2026-10-13:
+Average Stress: 22 (Relaxed)
+Relaxed: No data
+Low: No data
+Medium: No data
+High: No data
+
+2026-10-12:
+Average Stress: 28 (Low)
+Relaxed: No data
+Low: No data
+Medium: No data
+High: No data"

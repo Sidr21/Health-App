@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "Health",
+    "slug": "health-app",
+    "version": "0.1.0",
+    "scheme": "healthapp",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0B0B0E",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0B0B0E"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.sidr21.healthapp",
+      "infoPlist": {
+        "UIBackgroundModes": ["fetch", "processing"],
+        "NSHealthShareUsageDescription": "Health reads your body measurements (weight, BMI, body fat) and vitals from Apple Health to track trends next to your COROS data.",
+        "NSHealthUpdateUsageDescription": "Health does not write to Apple Health."
+      },
+      "entitlements": {
+        "com.apple.developer.healthkit": true,
+        "com.apple.developer.healthkit.background-delivery": true
+      }
+    },
+    "android": {
+      "package": "com.sidr21.healthapp",
+      "adaptiveIcon": {
+        "backgroundColor": "#0B0B0E",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "web": { "favicon": "./assets/favicon.png", "bundler": "metro" },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-notifications",
+      "expo-background-task",
+      ["@kingstinct/react-native-healthkit", { "background": true }]
+    ],
+    "experiments": { "typedRoutes": true }
+  }
+}

@@ -1,0 +1,29 @@
+"Sleep HRV — 2026-10-12 to 2026-10-13
+========================
+Note: dates are wake-up days (each value comes from the night that ended that morning).
+
+HRV Assessment — Last 2 days
+========================
+
+2026-10-13:
+  HRV Avg: 42 ms — Normal
+  Normal Range: 36 - 58 ms
+  Baseline: 47 ms
+2026-10-12:
+  HRV Avg: 57 ms — Normal
+  Normal Range: 35 - 57 ms
+  Baseline: 46 ms
+
+Sleep HRV Time Series — Last 2 days
+========================
+
+2026-10-12:
+  timestamp=1791778190, timezone=-16, hrv=58 ms, status=4, confidence=100000
+  timestamp=1791780290, timezone=-16, hrv=92 ms, status=4, confidence=88888
+  timestamp=1791780890, timezone=-16, hrv=40 ms, status=4, confidence=100000
+  timestamp=1791781490, timezone=-16, hrv=52 ms, status=4, confidence=100000
+2026-10-13:
+  timestamp=1791864590, timezone=-16, hrv=46 ms, status=4, confidence=100000
+  timestamp=1791865190, timezone=-16, hrv=35 ms, status=4, confidence=100000
+  timestamp=1791880790, timezone=-16, hrv=74 ms, status=4, confidence=85714
+  timestamp=1791882290, timezone=-16, hrv=36 ms, status=4, confidence=100000"

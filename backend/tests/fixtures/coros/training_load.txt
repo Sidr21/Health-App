@@ -1,0 +1,14 @@
+"Training Load Assessment
+========================
+
+2026-10-13
+Comment: Performance
+Short-Term Load: 29
+Long-Term Load: 46
+Load Ratio: 0.63
+
+2026-10-12
+Comment: Maintaining
+Short-Term Load: 34
+Long-Term Load: 47
+Load Ratio: 0.72"

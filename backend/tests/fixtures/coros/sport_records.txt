@@ -1,0 +1,32 @@
+"Sport Records — 2026-09-13 to 2026-10-13 (4 records)
+========================
+
+1. Outdoor Run — 2026-10-12
+   Location: Example County Run
+   Start Coordinates: 40.700001, -73.900003
+   Time Window: startTimestamp=1791848629 | endTimestamp=1791851134
+   Duration: 37:18 | Distance: 6.04 km
+   Average Pace: 6:10 /km | Avg HR: 155 bpm | Calories: 502 kcal
+   LabelId: 100000000000000001 | SportType: 100
+
+2. Indoor Cycling — 2026-10-09
+   Location: Indoor Bike
+   Time Window: startTimestamp=1791558467 | endTimestamp=1791565432
+   Duration: 1:24:33
+ | Avg HR: 74 bpm | Calories: 171 kcal
+   LabelId: 100000000000000002 | SportType: 201
+
+3. Hike — 2026-10-03
+   Location: Example Hike
+   Start Coordinates: -2.783000, -79.223000
+   Time Window: startTimestamp=1791045461 | endTimestamp=1791051904
+   Duration: 1:47:23 | Distance: 2.90 km
+   Average Speed: 1.6 km/h | Avg HR: 97 bpm | Calories: 449 kcal
+   LabelId: 100000000000000003 | SportType: 104
+
+4. Strength — 2026-09-17
+   Location: Strength
+   Time Window: startTimestamp=1789648595 | endTimestamp=1789648942
+   Duration: 5:47 | Sets: 3
+ | Avg HR: 83 bpm | Calories: 33 kcal
+   LabelId: 100000000000000004 | SportType: 402"

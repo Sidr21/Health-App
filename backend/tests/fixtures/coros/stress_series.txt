@@ -1,0 +1,7 @@
+"Stress Time Series — 2026-10-12
+========================
+
+2026-10-12:
+  timestamp=1791777890, timezone=-16, stress=14, score=1, stressHrv=0, stressHr=0
+  timestamp=1791778190, timezone=-16, stress=14, score=1, stressHrv=0, stressHr=0
+  timestamp=1791848990, timezone=-16, stress=82, score=4, stressHrv=0, stressHr=0"

@@ -1,0 +1,15 @@
+services:
+  api:
+    build: ./backend
+    env_file: .env
+    environment:
+      HEALTH_DATA_DIR: /data
+      HEALTH_DATABASE_URL: sqlite:////data/health.db
+    volumes:
+      - health-data:/data
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+volumes:
+  health-data:

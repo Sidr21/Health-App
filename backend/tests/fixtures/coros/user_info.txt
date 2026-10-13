@@ -1,0 +1,8 @@
+"User Profile Information
+========================
+
+Height: 175.0 cm
+Weight: 67.4 kg
+Birthday: 2000-01-15 (Age: 26)
+Gender: Male
+Nickname: example"

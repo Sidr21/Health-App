@@ -4,7 +4,7 @@ A Bevel-style recovery / sleep / training app built on COROS data instead of App
 with Apple Health as a secondary source for body metrics, and our own physiology models
 (VO2max, threshold HR, biological age) so we are not just re-skinning COROS numbers.
 
-Status: **design draft v3** (2026-10-13). Decided: React Native client, cloud-hosted backend, scale → Apple Health. Nothing is built yet. This doc is the contract for what we build and in what order.
+Status: **v3** (2026-10-13). Decided: React Native client, cloud-hosted backend, scale → Apple Health. Phase 0 scaffold is in the repo (`backend/`, `app/`); setup steps in `docs/SETUP.md`. This doc is the contract for what we build and in what order.
 
 ---
 
