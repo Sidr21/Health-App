@@ -14,7 +14,7 @@ export interface ScoreEntry {
 
 export interface DayPayload {
   date: string;
-  scores: Partial<Record<"recovery" | "sleep" | "strain" | "stress" | "energy", ScoreEntry>>;
+  scores: Partial<Record<"recovery" | "sleep" | "strain" | "stress" | "energy" | "cardio_load" | "muscular", ScoreEntry>>;
   daily: {
     steps: number | null;
     calories: number | null;
@@ -80,6 +80,7 @@ export interface ZoneOut {
 
 export interface WorkoutDetail {
   id: number;
+  load: { trimp: number; method: "stream" | "avg_hr" | "coros_load" | "none"; strain: number };
   source: string;
   sport: string;
   sport_code: number | null;
@@ -174,13 +175,35 @@ export type SettingsIn = Partial<{
   sleep_need_min: number;
 }>;
 
+export interface ValueAt {
+  value: number;
+  date: string;
+  ci?: [number, number];
+}
+
 export interface FitnessModels {
   hr_max: HrMaxOut | null;
-  vo2max: { coros: { value: number; date: string } | null; ours: number | null; status: string };
-  running_level: { value: number; date: string } | null;
-  threshold: { coros_pace_s_per_km: { value: number; date: string } | null; ours_lthr: number | null; ours_pace_s_per_km: number | null; status: string };
-  races: { key: string; label: string; distance_m: number; coros_s: { value: number; date: string } | null; ours_s: number | null }[];
+  vo2max: { coros: ValueAt | null; ours: ValueAt | null; parts: Record<string, number>; lower_bound: ValueAt | null; status: string | null };
+  running_level: ValueAt | null;
+  lthr: { value: number; ci: [number, number] | null; parts: Record<string, number>; prior_only: boolean } | null;
+  threshold: { coros_pace_s_per_km: ValueAt | null; ours_lthr: number | null; ours_pace_s_per_km: number | null; pace_method: string | null; status: string | null };
+  critical_speed: { m_per_s: number; d_prime_m: number | null } | null;
+  races: { key: string; label: string; distance_m: number; coros_s: ValueAt | null; ours_s: number | null }[];
+  prediction: { vdot: number; method: string; economy: number | null } | null;
   inputs: { runs: number; runs_with_streams: number };
+}
+
+export interface BioAgeOut {
+  value: number | null;
+  date?: string;
+  age?: number;
+  delta?: number;
+  fitness_age?: number | null;
+  contributions?: Record<string, number>;
+  adjustments?: Record<string, number>;
+  inputs?: Record<string, number | string | null>;
+  vo2max_source?: string | null;
+  history: { date: string; value: number }[];
 }
 
 export interface HKSampleOut {
@@ -292,6 +315,7 @@ export const api = {
   settings: () => request<SettingsOut>("/settings"),
   putSettings: (body: SettingsIn) => request<SettingsOut>("/settings", { method: "PUT", body: JSON.stringify(body) }),
   fitnessModels: () => request<FitnessModels>("/fitness/models"),
+  bioage: () => request<BioAgeOut>("/bioage"),
   strengthExercises: () =>
     request<{ common: CommonExercise[]; muscles: { id: MuscleId; name: string; views: string[] }[] }>("/strength/exercises"),
   logStrength: (body: LogSessionIn) =>

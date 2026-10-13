@@ -16,11 +16,11 @@ import type { MuscleFill } from "@/lib/strength";
 import { clockDuration, distance, elevation, getUnits, pace } from "@/lib/units";
 import { colors, font, fonts, radius, spacing } from "@/theme/tokens";
 
-function loadBand(tl: number): string {
-  if (tl < 50) return "Light load";
-  if (tl < 100) return "Moderate load";
-  if (tl < 150) return "Hard load";
-  return "Very hard load";
+function strainBand(v: number): string {
+  if (v < 6) return "Light";
+  if (v < 11) return "Moderate";
+  if (v < 15) return "High";
+  return "All out";
 }
 
 const HRR_SCALE = ["Poor", "Fair", "Good", "Excellent", "Superior"];
@@ -122,8 +122,8 @@ export default function WorkoutScreen() {
               <View style={styles.badge}><Text style={styles.badgeText}>{w.source.toUpperCase()}</Text></View>
             </View>
             <View style={{ alignItems: "center" }}>
-              <Dial progress={tl != null ? Math.min(1, tl / 200) : null} value={tl != null ? String(Math.round(tl)) : "–"} label="Load" color={colors.strain} size={118} />
-              <Text style={styles.heroCaption}>{tl != null ? loadBand(tl) : "COROS summary not synced"}</Text>
+              <Dial progress={w.load.method !== "none" ? w.load.strain / 21 : null} value={w.load.method !== "none" ? w.load.strain.toFixed(1) : "–"} label="Strain" color={colors.strain} size={118} />
+              <Text style={styles.heroCaption}>{w.load.method !== "none" ? `${strainBand(w.load.strain)} · ${Math.round(w.load.trimp)} TRIMP` : "No heart rate"}</Text>
             </View>
           </Surface>
 

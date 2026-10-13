@@ -318,6 +318,20 @@ Code: `engine/muscles.py` (pure), `compute.strength_summary`, `GET /strength`.
 
 **Totals.** Sets = working sets (no warm-ups). Volume = Σ reps × weight; bodyweight sets add sets but no volume.
 
+### 6.11 Engine v1 as built (October 2026)
+
+Code: `engine/load.py`, `engine/energy.py`, `engine/fitness.py`, `engine/bioage.py` (pure, tested in `tests/test_engine_models.py`); DB glue in `compute_models.py`, run by `compute_range` (so `health compute` and the sync cover it). No backtest yet. Where v1 differs from §6.4–6.8:
+
+- **Strain** (`scores.kind = "strain"`): workout TRIMP from the FIT stream (gaps capped at 10 s), else from average HR × duration, else COROS training load at 1 TRIMP per point. Steps outside workouts add 0.0015 TRIMP per step. Daily strain = 21 · (1 − e^(−TRIMP/150)): 15 k steps ≈ 3, an easy 45 min run ≈ 7–9, a hard session 15–18. Bands: Light < 6, Moderate < 11, High < 15, All out. The workout screen shows the activity's own strain on the same scale (the 90-day-percentile ring of §6.9 is not built).
+- **Cardio load** (`"cardio_load"`): value = ATL. CTL/ATL are 42/7-day EWMAs of daily TRIMP over 120 days, starting at the first day with load and seeded with the mean of its first 14 days (starting from zero made every early ratio look like overload). Status words from ATL/CTL as in §6.9, but only after 28 days of history; before that "Building baseline". Optimal band 0.8–1.3 × CTL.
+- **Stress** (`"stress"`): time-weighted mean of COROS samples outside the sleep window, each sample lasting until the next (capped at 15 min); high-stress minutes at ≥ 50.
+- **Energy bank** (`"energy"`): starts at the morning's recovery (70 without one) at wake-up and steps in 5-min slots: −2/h awake, −1.5/h per 25 stress points above 25, +1/h while stress < 25, −0.25 per workout TRIMP spread over the workout. Clamped 0–100; the hourly timeline is stored in `components`. Sleep refill is the next morning's recovery rather than a modelled curve.
+- **VO₂max** (`fitness_estimates`): the HR–pace estimator (§6.5.1) uses runs with FIT streams from the last 90 days, a duration-weighted median per run, and a 30-day exponentially weighted mean across runs after dropping values beyond 2.5 MAD. Its SD is the standard error across runs (floor 2; 3 for a single run). Best efforts (1 mi, 5 km, 10 km and 3–30 min bests, HR ≥ 88 % HRmax) give a Daniels VDOT; it is an estimator only when the effort is ≥ 70 % of the run's moving time (race-like), otherwise a lower bound shown beside the number. Critical speed needs ≥ 3 bests from ≥ 2 runs, D′ 50–600 m and R² ≥ 0.9; VO₂max from CS = VDOT of a 10 km run at CS. Estimators are blended by inverse variance with a 95 % CI.
+- **Race predictions**: Daniels race times from a prediction VDOT: the mean of race-like VDOT and CS VO₂max when either exists, else HR–pace VO₂max × running economy 0.88 (until a race calibrates it), never below the best-effort lower bound.
+- **LTHR**: Friel (≥ 30 min hard steady effort, last 20 min average HR), HR at CS from the pooled HR–speed line of steady windows, and the 0.89 × HRmax prior (SD 8); blended as above. The Conconi deflection method (§6.6.2) is not built. Threshold pace = CS, else the HR–speed line at LTHR.
+- **HRmax**: set value, else the higher of the highest activity max HR in the last 12 months and 208 − 0.7 × age (as in §7.1). Percentile and artefact filtering wait for more streams.
+- **Biological age** (`fitness_estimates.metric = "bio_age"`, `GET /bioage`): fitness age inverts the FRIEND 50th-percentile treadmill norms (men 48.0/42.4/37.8/32.6/28.2/24.4, women 37.6/30.9/27.1/23.4/20.0/17.3 at ages 25–75). Adjustments in years: RHR 1 per bpm from 64 (men) / 68 (women); HRV −20 · ln(RMSSD / (75 − 0.75 · age)); body 1 per BMI point outside 18.5–25 plus 0.5 per body-fat point above 20 % / 28 %; sleep 2 per hour outside 7–9 h plus (70 − score)/10; activity (500 − MET-min)/100 below 500, up to −3 above 1000. Each clamped ±15. Missing inputs are dropped and the remaining weights renormalised, so they neither help nor hurt. Computed daily from a 30-day window (not only Mondays); the per-input contributions sum to the delta.
+
 ---
 
 ## 7. App screens (matched to the Bevel screenshots in `docs/reference/bevel/`)
@@ -495,7 +509,8 @@ Out of scope but visible in Bevel, kept as later options: nutrition (ref 05), he
 - **Journal** saves through `PUT/DELETE /journal`; **Insights** (`/journal/insights`) compares the next wake-up day's recovery, sleep score, HRV and resting HR after yes vs no days (median split for amounts), Welch z, minimum 5 days each side, sample sizes always shown.
 - **Body** (Biology tab + `body/[metric]`): weight, BMI (scale value or weight/height²), body fat, lean mass, with 30D/90D/1Y charts and readings.
 - **Settings**: HRmax override (field test) or estimate, profile, sleep need, units (imperial/metric, applied app-wide), data-source freshness, Apple Health connect.
-- **Fitness models**: HRmax live; VO₂max, threshold and race predictions show COROS's values with ours marked as waiting for FIT streams.
+- **Fitness models**: our VO₂max (with range, how it is built and the best-effort lower bound), HRmax, LTHR and threshold pace, and race predictions, each beside COROS's value (§6.11).
+- **Engine scores in the app**: Home's strain dial and energy bar, the Fitness tab's cardio load gauge, the workout screen's strain dial and the Biology tab's biological age card (value, delta, fitness age, per-input contributions) all read the v1 engine.
 - **Dev gallery** (`/dev/gallery`, development builds only): the hypnogram and per-second HR chart with clearly labelled synthetic data, for previewing without phone data.
 
 ## 8. Build plan

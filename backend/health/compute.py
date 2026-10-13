@@ -183,13 +183,19 @@ def compute_day(s: Session, d: date) -> dict[str, float | None]:
     return out
 
 
-def compute_range(s: Session, start: date, end: date) -> int:
+def compute_range(s: Session, start: date, end: date, *, models: bool = True) -> int:
+    """Recovery / sleep / muscular per day, then strain, load, stress, energy for the range
+    and fitness models + biological age as of `end` (health.compute_models)."""
     n = 0
     d = start
     while d <= end:
         compute_day(s, d)
         n += 1
         d += timedelta(days=1)
+    if models:
+        from health.compute_models import compute_models
+
+        compute_models(s, end, start)
     return n
 
 
@@ -514,10 +520,16 @@ def workout_detail(s: Session, activity_id: int) -> dict | None:
         }
         for x in samples
     ]
+    from health.compute_models import activity_load
+    from health.models import User
+
+    user = s.execute(select(User)).scalars().first()
+    load = activity_load(s, a, hr_max=hm.value if hm else None, sex=user.sex if user else None)
     return {
         "id": a.id,
         "source": a.source,
         "sport": a.sport,
+        "load": {"trimp": load["trimp"], "method": load["method"], "strain": load["strain"]},
         "sport_code": a.sport_code,
         "location": a.location,
         "start": a.start_ts.replace(tzinfo=UTC).isoformat(),
@@ -681,17 +693,24 @@ RACES = [
 
 
 def fitness_models(s: Session, today: date) -> dict:
-    """Our model estimates next to COROS's. Ours need FIT streams (DESIGN §6.5–6.6), so until
-    those are synced each block says what it is waiting for."""
-    from health.models import ActivitySample, FitnessEstimate
+    """Our model estimates next to COROS's (DESIGN §6.5–6.7). Each block carries its parts,
+    confidence interval and, when ours is missing, what it is waiting for."""
+    from health.compute_models import latest_fitness
+    from health.models import ActivitySample
 
-    latest: dict[tuple[str, str], FitnessEstimate] = {}
-    for r in s.execute(select(FitnessEstimate).order_by(FitnessEstimate.date)).scalars():
-        latest[(r.metric, r.method)] = r
+    latest = latest_fitness(s, today)
 
-    def coros(metric: str) -> dict | None:
-        r = latest.get((metric, "coros"))
-        return {"value": r.value, "date": r.date.isoformat()} if r else None
+    def val(metric: str, method: str) -> dict | None:
+        r = latest.get((metric, method))
+        if r is None:
+            return None
+        out = {"value": r.value, "date": r.date.isoformat()}
+        if r.ci_low is not None:
+            out["ci"] = [round(r.ci_low, 1), round(r.ci_high, 1)]
+        return out
+
+    def parts(metric: str, skip: tuple[str, ...]) -> dict[str, float]:
+        return {m: r.value for (k, m), r in latest.items() if k == metric and m not in skip}
 
     runs = s.execute(select(Activity).where(Activity.sport.ilike("%run%"))).scalars().all()
     with_stream = {a for (a,) in s.execute(select(ActivitySample.activity_id).distinct())}
@@ -701,21 +720,57 @@ def fitness_models(s: Session, today: date) -> dict:
         f"Needs heart-rate + pace streams from FIT files ({n_stream} of {len(runs)} runs "
         "synced). Runs on the Mac sync."
     )
+    vo2 = val("vo2max", "blend")
+    lthr = latest.get(("lthr", "blend"))
+    tp = latest.get(("threshold_pace", "ours"))
+    cs = latest.get(("critical_speed", "ours"))
+    pred = latest.get(("race_5k", "ours"))
     return {
         "hr_max": (
             {"value": hm.value, "method": hm.method, "candidates": hm.candidates} if hm else None
         ),
-        "vo2max": {"coros": coros("vo2max"), "ours": None, "status": waiting},
-        "running_level": coros("running_level"),
-        "threshold": {
-            "coros_pace_s_per_km": coros("threshold_pace"),
-            "ours_lthr": None,
-            "ours_pace_s_per_km": None,
-            "status": waiting,
+        "vo2max": {
+            "coros": val("vo2max", "coros"),
+            "ours": vo2,
+            "parts": parts("vo2max", ("coros", "blend", "vdot_lower_bound")),
+            "lower_bound": val("vo2max", "vdot_lower_bound"),
+            "status": None if vo2 else waiting,
         },
+        "running_level": val("running_level", "coros"),
+        "lthr": (
+            {
+                "value": lthr.value,
+                "ci": [round(lthr.ci_low, 1), round(lthr.ci_high, 1)] if lthr.ci_low else None,
+                "parts": parts("lthr", ("blend",)),
+                "prior_only": set(parts("lthr", ("blend",))) == {"prior"},
+            }
+            if lthr
+            else None
+        ),
+        "threshold": {
+            "coros_pace_s_per_km": val("threshold_pace", "coros"),
+            "ours_lthr": lthr.value if lthr else None,
+            "ours_pace_s_per_km": tp.value if tp else None,
+            "pace_method": (tp.inputs or {}).get("method") if tp else None,
+            "status": None
+            if tp
+            else waiting.replace(
+                "Needs", "Threshold pace needs a 30-min hard effort or critical speed;"
+            ),
+        },
+        "critical_speed": (
+            {"m_per_s": cs.value, "d_prime_m": (cs.inputs or {}).get("d_prime")} if cs else None
+        ),
         "races": [
-            {"key": k, "label": label, "distance_m": dist, "coros_s": coros(k), "ours_s": None}
+            {
+                "key": k,
+                "label": label,
+                "distance_m": dist,
+                "coros_s": val(k, "coros"),
+                "ours_s": latest[(k, "ours")].value if (k, "ours") in latest else None,
+            }
             for k, label, dist in RACES
         ],
+        "prediction": (pred.inputs if pred else None),
         "inputs": {"runs": len(runs), "runs_with_streams": n_stream},
     }

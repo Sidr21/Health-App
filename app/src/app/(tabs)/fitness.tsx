@@ -18,15 +18,6 @@ import { useStrength } from "@/lib/strength";
 import { todayIso, useDays } from "@/lib/useDays";
 import { colors, font, fonts, spacing } from "@/theme/tokens";
 
-function loadStatus(ratio: number | null | undefined, comment: string | null | undefined): string | null {
-  if (comment) return comment;
-  if (ratio == null) return null;
-  if (ratio < 0.8) return "Detraining";
-  if (ratio <= 1.3) return "Productive";
-  if (ratio <= 1.5) return "Overreaching";
-  return "Overload";
-}
-
 export default function FitnessScreen() {
   const q = useDays(28);
   const today = todayIso();
@@ -47,6 +38,7 @@ export default function FitnessScreen() {
   });
   const day = q.byDate.get(selected);
   const latest = q.days[q.days.length - 1];
+  const cardio = latest?.scores.cardio_load?.components as { atl: number; ctl: number; optimal: [number, number] | null; status: string } | undefined;
   const weekTotal = q.days.filter((d) => week.includes(d.date)).reduce((s, d) => s + d.activities.reduce((t, a) => t + (a.duration_s ?? 0), 0), 0);
   const weekKcal = q.days.filter((d) => week.includes(d.date)).reduce((s, d) => s + d.activities.reduce((t, a) => t + (a.calories ?? 0), 0), 0);
 
@@ -76,11 +68,11 @@ export default function FitnessScreen() {
       <View style={styles.gauges}>
         <Gauge
           title="Cardio"
-          value={latest?.daily.coros_stl ?? null}
+          value={cardio ? Math.round(cardio.atl) : null}
           min={0}
-          max={Math.max(80, Math.ceil(((latest?.daily.coros_ltl ?? 50) * 1.6) / 10) * 10)}
-          optimal={[Math.round((latest?.daily.coros_ltl ?? 50) * 0.8), Math.round((latest?.daily.coros_ltl ?? 50) * 1.3)]}
-          status={loadStatus(latest?.daily.coros_load_ratio, latest?.daily.coros_load_comment)}
+          max={Math.max(40, Math.ceil((Math.max(cardio?.atl ?? 0, cardio?.optimal?.[1] ?? 30) * 1.4) / 10) * 10)}
+          optimal={cardio?.optimal ? [Math.round(cardio.optimal[0]), Math.round(cardio.optimal[1])] : [0, 0]}
+          status={cardio?.status ?? null}
           color={colors.cardio}
         />
         <Gauge
@@ -93,7 +85,7 @@ export default function FitnessScreen() {
           color={colors.muscular}
         />
       </View>
-      <Text style={styles.footnote}>Cardio is COROS&apos;s short- vs long-term load until our TRIMP load lands. Muscular is set-equivalents over 7 days, from lifting and cardio.</Text>
+      <Text style={styles.footnote}>Cardio: daily training impulse (TRIMP) averaged over the last week vs your 6-week base. Muscular: set-equivalents over 7 days, from lifting and cardio.</Text>
 
       <SectionLabel title="Cardio" action={<Text style={styles.edit}>Edit</Text>} />
       <View style={styles.grid}>

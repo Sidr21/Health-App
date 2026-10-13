@@ -43,6 +43,7 @@ export default function HomeScreen() {
   const weather = useQuery({ queryKey: ["weather"], queryFn: () => fetchWeather(), staleTime: 30 * 60_000 });
   const rec = today?.scores.recovery;
   const sleep = today?.scores.sleep;
+  const strainSc = today?.scores.strain;
   const comps = (rec?.components ?? {}) as RecoveryComps;
   const WeatherIcon = weather.data && weather.data.code >= 3 ? CloudIcon : SunIcon;
   const rhr = today?.daily.rhr ?? null;
@@ -77,7 +78,7 @@ export default function HomeScreen() {
       <Surface radiusSize={radius.lg} style={styles.ringCard}>
         <View style={styles.dials}>
           <View style={styles.ringCol}>
-            <Dial label="Strain" progress={null} value="–" color={colors.strain} hatched />
+            <Dial label="Strain" progress={strainSc ? strainSc.value / 21 : null} value={strainSc ? strainSc.value.toFixed(1) : "–"} color={colors.strain} hatched={!strainSc} />
           </View>
           <Pressable style={styles.ringCol} onPress={() => router.push("/recovery")}>
             <Dial label="Recovery" progress={rec ? rec.value / 100 : null} value={rec ? pct(rec.value) : "–"} color={bandColor(comps.band)} />
@@ -114,7 +115,7 @@ export default function HomeScreen() {
 
       <SectionLabel title="Stress & Energy" />
       <StressCard avg={today?.daily.stress_avg ?? null} min={today?.daily.stress_min ?? null} max={today?.daily.stress_max ?? null} updated={today?.daily.stress_updated ?? null} />
-      <EnergyBar pct={null} />
+      <EnergyBar pct={today?.scores.energy?.value ?? null} />
 
       <SectionLabel title="Health Monitor" note="vs your 28-day normal" />
       <View style={styles.grid}>

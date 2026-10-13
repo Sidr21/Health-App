@@ -410,6 +410,31 @@ def body_summary_api(days: int = Query(365, ge=7, le=3650), s: Session = Depends
     return body_summary(s, _today(), days)
 
 
+@app.get("/bioage", dependencies=[Depends(require_token)])
+def bioage_api(s: Session = Depends(get_session)) -> dict:
+    """Latest biological age with each input's contribution, plus its history."""
+    from health.models import FitnessEstimate
+
+    rows = (
+        s.execute(
+            select(FitnessEstimate)
+            .where(FitnessEstimate.metric == "bio_age")
+            .order_by(FitnessEstimate.date)
+        )
+        .scalars()
+        .all()
+    )
+    if not rows:
+        return {"value": None, "history": []}
+    last = rows[-1]
+    return {
+        "value": last.value,
+        "date": last.date.isoformat(),
+        **(last.inputs or {}),
+        "history": [{"date": r.date.isoformat(), "value": r.value} for r in rows],
+    }
+
+
 @app.get("/fitness/models", dependencies=[Depends(require_token)])
 def fitness_models_api(s: Session = Depends(get_session)) -> dict:
     return fitness_models(s, _today())
