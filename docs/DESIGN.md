@@ -4,7 +4,7 @@ A Bevel-style recovery / sleep / training app built on COROS data instead of App
 with Apple Health as a secondary source for body metrics, and our own physiology models
 (VO2max, threshold HR, biological age) so we are not just re-skinning COROS numbers.
 
-Status: **design draft v1** (2026-10-13). Nothing is built yet. This doc is the contract for what we build and in what order.
+Status: **design draft v2** (2026-10-13). Client decided: native iOS via React Native. Nothing is built yet. This doc is the contract for what we build and in what order.
 
 ---
 
@@ -22,7 +22,7 @@ Status: **design draft v1** (2026-10-13). Nothing is built yet. This doc is the 
 
 - Not a workout *planner* (COROS already does this; the MCP can create workouts if we ever want it).
 - Not multi-user / not a SaaS. One athlete, one database. Keep auth trivial.
-- No Android client in v1 (Apple Health requirement makes iOS the target anyway).
+- No Android client in v1. React Native keeps the door open, but HealthKit-dependent features are iOS-only.
 - No real-time / live HR. Everything is post-sync.
 
 ---
@@ -43,7 +43,7 @@ From Bevel's App Store listing, help center and third-party reviews (screens cou
 | **Biological Age** (Pro) | Weekly, rolling 30-day average of sleep, activity, RHR, optional blood biomarkers; shows "this week's changes" per input | Transparent fitness-age composite (section 6.5), weekly, with per-input contribution |
 | AI coach, food photo logging, Strength Builder | Chat coach, nutrition, programs | Out of scope v1; optional LLM "daily note" in phase 5 |
 
-Design language to copy: dark-first UI, one large number per card, thin circular progress rings, muted category colours (recovery green/amber/red, sleep blue/purple, strain orange, stress yellow), small sparklines on every card, "vs baseline" deltas everywhere.
+Design language to copy (from the screenshots in `docs/reference/bevel/`): **light-first** with soft blue/lavender gradient backgrounds, white rounded cards, one large numeral per card, thin circular progress rings, chip filters, status badges with arrow icons ("Normal", "Below normal"), sparklines with a shaded normal-range band, a "Normal range 34–67 %" label on every score, and plain-language insight cards. Sleep is the one dark (navy) screen. Category colours: recovery green, sleep blue/purple, strain orange/red, stress yellow, energy teal.
 
 ---
 
@@ -86,20 +86,17 @@ The smart scale writes to COROS, not Apple Health, so weight lives on the COROS 
 - Check during phase 1 whether the Training Hub API exposes the scale's full history (weight, body-fat %, BMI); if it does, backfill from there.
 - Keep Apple Health as a second body-metrics source only if something else writes there.
 
-### 3.3 Apple Health
+### 3.3 Apple Health (HealthKit, read directly by the app)
 
 COROS already writes steps, heart rate, sleep analysis and distances into Apple Health. We treat COROS as the source of truth for those and use Apple Health for:
 
-- Body-fat %, lean body mass, height, waist, and weight only if a non-COROS source writes it
+- Body mass, BMI, body-fat %, lean body mass, height, waist — **assumes the smart scale's own app also writes to Apple Health** (most do: Withings, Renpho, Eufy, Garmin Index). COROS's Apple Health sync does not list weight, so if the scale only talks to COROS, weight history comes from the sync-time capture in 3.2 instead. Verify in phase 1.
 - Blood pressure, blood oxygen (if measured by something else), respiratory rate
 - Apple's own VO2max estimate (if an Apple Watch is ever worn), for comparison
 - Dietary energy / macros, water, caffeine, mindful minutes
 - Any workouts not recorded on the COROS watch (dedupe by overlapping time window)
 
-Two ways in, pick by client choice (section 4.1):
-
-- **Native iOS app** → HealthKit directly, background delivery.
-- **PWA** → the *Health Auto Export* app's REST automation posts JSON to our `/ingest/apple-health` endpoint on a schedule. Well-trodden pattern for personal dashboards; no App Store needed.
+Mechanics: the app requests read permission for these types, registers HealthKit **background delivery** (`enableBackgroundDelivery`) plus an anchored query per type, and POSTs new samples to the backend's `/ingest/apple-health` endpoint whenever iOS wakes it. On app open it also runs a catch-up query. Dedupe key = `(source bundle id, uuid)`.
 
 ### 3.4 Manual / journal
 
@@ -114,7 +111,7 @@ Journal tags and notes, race results (used to validate VO2max), HRmax tests, sic
 │  COROS (MCP or Hub API)  │      │  Apple Health (HealthKit /   │
 │  activities, FIT, daily  │      │  Health Auto Export webhook) │
 └────────────┬─────────────┘      └───────────────┬──────────────┘
-             │ pull (cron, every 15 min)           │ push (JSON)
+             │ pull (cron, every 15 min)           │ app POSTs new samples
              ▼                                     ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │  backend/  (Python 3.12, FastAPI)                                 │
@@ -130,7 +127,7 @@ Journal tags and notes, race results (used to validate VO2max), HRmax tests, sic
                                │ HTTPS JSON
                                ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│  app/  mobile client (see 4.1)                                    │
+│  app/  Expo / React Native iOS client (see 4.1)                   │
 │  Today · Trends · Workouts · Fitness · Journal · Settings         │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -141,25 +138,31 @@ Principles
 - **Engine is a pure library** with no I/O. Unit-tested with fixture FIT files and synthetic nights. The CLI lets us compare our numbers with COROS's before any UI exists.
 - **Every derived number carries provenance**: method name, inputs used, confidence/CI, and the COROS value it competes with.
 
-### 4.1 Client choice (decision needed)
+### 4.1 Client: native iOS built with React Native (decided)
 
-| | **A. PWA (Next.js + TypeScript)** — recommended to start | **B. Native iOS (SwiftUI)** |
-|---|---|---|
-| Apple Health | via Health Auto Export webhook (scheduled, not instant) | HealthKit directly, background delivery |
-| Buildable here | yes — this cloud session can build, run and screenshot it | no — needs Xcode on a Mac; I can write Swift but not compile it |
-| Install | "Add to Home Screen", full-screen, dark mode | App Store / TestFlight / sideload |
-| Widgets, push | limited (web push works on iOS 16.4+) | full |
-| Effort to first usable screen | days | weeks |
+Decision: **React Native via Expo, TypeScript.** It is a real native app (App Store-installable, full HealthKit, push, widgets later) written in JavaScript/React, which is the stack you want to work in.
 
-Recommendation: **A first**, with the API designed so B can be added later without touching the engine. Revisit after phase 4.
+| | React Native (Expo) — chosen | SwiftUI | PWA |
+|---|---|---|---|
+| HealthKit | yes, via `@kingstinct/react-native-healthkit` (Expo config plugin, background delivery supported) | yes | no (needs a helper app) |
+| Language | TypeScript / React | Swift | TypeScript / React |
+| Build without a Mac | yes: **EAS Build** compiles iOS in the cloud; install via TestFlight or an internal-distribution dev build | no | n/a |
+| Can be exercised in this cloud session | component logic + UI in unit tests and Storybook-style screenshots; the real HealthKit path must be run on your phone | no | fully |
+| Widgets / Live Activities | later, via a small Swift extension (Expo supports native modules) | native | weak |
+
+Things to know up front:
+
+- **Expo Go cannot load HealthKit** (custom native code), so we use a *development build*: `eas build --profile development --platform ios`, install on your iPhone, then JS changes hot-reload over the network. One cloud build per native-dependency change, not per code change.
+- An **Apple Developer account ($99/yr)** is needed for TestFlight and internal distribution. Without it, a free Apple ID can only sideload through Xcode for 7 days at a time.
+- HealthKit background delivery wakes the app at most roughly hourly for most types; that is fine for weight and body composition.
 
 ### 4.2 Stack
 
-- Backend: Python 3.12, FastAPI, SQLAlchemy, `fitdecode` for FIT, numpy/pandas for the engine, APScheduler for sync. `uv` for deps, `pytest`, `ruff`.
-- Client: Next.js (app router), TypeScript, Tailwind, Recharts or a thin D3 layer for rings/sparklines, PWA manifest + service worker.
+- Backend: Python 3.12, FastAPI, SQLAlchemy, `fitdecode` for FIT, numpy/pandas for the engine, APScheduler for sync. `uv` for deps, `pytest`, `ruff`. (If you would rather have one language everywhere, the engine ports to TypeScript with `fit-file-parser` and `simple-statistics`; Python is recommended because the numerical work and FIT tooling are better there.)
+- App: Expo SDK (latest stable), TypeScript, Expo Router for navigation, `react-native-reanimated` + `react-native-skia` for rings, sparklines and the hypnogram (Victory Native XL is built on Skia and gives line/area charts with bands), `@kingstinct/react-native-healthkit`, `expo-notifications`, `expo-background-task`, TanStack Query for API data, Zustand for local state.
 - Storage: SQLite file during development; Postgres when hosted. Raw blobs on disk (`data/raw/coros/fit/<labelId>.fit`, `data/raw/coros/daily/<date>.json`, `data/raw/apple/<ts>.json`).
-- Hosting: Docker Compose. Run locally on a Mac/mini-PC or on Fly.io/Railway; single container + volume is enough.
-- Secrets: `.env` (COROS credentials/OAuth tokens, ingest webhook key).
+- Hosting: Docker Compose. Run locally on a Mac/mini-PC or on Fly.io/Railway; single container + volume is enough. The phone needs to reach it, so either a public URL or Tailscale.
+- Secrets: `.env` (COROS credentials/OAuth tokens, ingest API key the app presents).
 
 ---
 
@@ -290,44 +293,95 @@ Screen shows the number, delta vs chronological age, and a "this week's changes"
 
 ---
 
-## 7. App screens (Bevel-like)
+## 7. App screens (matched to the Bevel screenshots in `docs/reference/bevel/`)
 
-Tab bar: **Today · Trends · Workouts · Fitness · Journal**, settings via avatar in the header.
+Tab bar: **Today · Trends · Workouts · Fitness · Journal**; settings behind the avatar in the Today header. Light theme with a soft gradient background; Sleep detail is dark navy like Bevel's.
 
-**Today**
+**Today** (ref `01-today-home.png`)
 ```
 ┌─────────────────────────────────┐
-│ Mon 13 Oct      ◄ ●●●●●●● ►  (S)│  date strip, 7 dots = last 7 days colour-coded by recovery
-│                                 │
-│   ╭────╮  ╭────╮  ╭────╮ ╭────╮ │  four rings: Recovery 72 · Sleep 68 · Strain 6.1 · Stress 22
-│   │ 72 │  │ 68 │  │6.1 │ │ 22 │ │  tap → detail screen
-│   ╰────╯  ╰────╯  ╰────╯ ╰────╯ │
-│ Energy  ▁▂▃▅▆▇▇▆▅▄▃▂  58 now    │  Energy Bank curve for the day
-│                                 │
-│ HRV 42 ms  ▁▃▂▅▆▂▃  (base 47)   │  key vitals row with sparklines + baseline
-│ RHR 57     ▆▅▅▄▃▂▁  (base 60)   │
-│                                 │
-│ Today's workouts                │  cards with sport icon, duration, TRIMP, "recovery impact"
-│ ─ Outdoor run · 6.0 km · 37:18  │
-│                                 │
-│ Insight                         │  one line, rule-based v1 ("HRV below range 3 of last 7
-│ "Two low-HRV nights in a row…"  │  nights; consider an easy day"), LLM-written later
+│ Today, Oct 13 ▾            (SR) │  date dropdown opens a calendar; avatar → settings
+│ [🏃 Active · until changed ▾] [☀ 18° New York] │  status chip (Active / Rest day / Sick / Travel = journal shortcut) + weather
+│ ┌─────────────────────────────┐ │
+│ │  ◯ 6.1     ◯ 72 %    ◯ 68  │ │  card with three rings: Strain · Recovery · Sleep (Bevel's order)
+│ │  Strain   Recovery   Sleep  │ │  tap a ring → score detail (modal)
+│ └─────────────────────────────┘ │
+│ ┌ Energy  58 %  ▁▂▃▅▆▇▇▆▅▄▃ ─┐ │  Energy Bank + Stress as a fourth card (Bevel puts these on the watch face)
+│ ┌ Resting HRV  42 ms  Normal ▁▃▂▅▆▂▃ ┐│  stacked metric cards, value left, badge, sparkline with band right
+│ ┌ Resting HR   57 bpm Normal ▆▅▅▄▃▂▁ ┐│
+│ ┌ Sleep        7h 07m Below usual ▃▅▆▂┐│
+│ ┌ Today's workouts ───────────┐ │  sport icon · name · duration · strain contribution
+│ │ 🏃 Outdoor run 6.0 km 37:18 │ │
+│ ┌ 🌱 Insight ─────────────────┐ │  one-paragraph plain-language card, expandable (ref 04 bottom card)
+│ └─────────────────────────────┘ │
+│  Today  Trends  Workouts  Fitness  Journal │
+└─────────────────────────────────┘
+```
+Empty state before baselines exist: rings show "– %" and the card says "Nothing to see yet" with a calibrating hint, as in the screenshot.
+
+**Score detail** (ref `02-strain-score-detail.png`, one layout for Strain, Recovery, Sleep, Stress, Energy)
+```
+┌─────────────────────────────────┐
+│ ✕          Strain Score         │  presented as a modal sheet
+│ 65 %                 Normal range│  big value + date left; personal normal range right, coloured by band
+│ Feb 19                34 – 67 % │
+│ [Strain score][Exercise duration][Daytime HR][TRIMP]│  chip row switches the chart's series
+│   ╱╲        ╱╲            100   │  line chart with dot markers, gradient fill, dotted "Avg. 66 %" line,
+│ ╱╱  ╲╲____╱╱  ╲╲  Avg 66 %  67  │  shaded normal band; 1W / 1M / 3M range toggle under it
+│ ┌ Daytime HR  45 bpm  ↓ Below normal  ▁▂▃▅▄▂ →┐│  component cards, each tappable → Trends for that metric
+│ ┌ Total energy …                               ┐│
+│ ┌ How this was computed ──────┐ │  our addition: component weights and the values that went in
 └─────────────────────────────────┘
 ```
 
-**Score detail** (one layout, four scores): big ring, band label, "vs 30-day" delta, contributing factors as rows with their own mini-bars (e.g. HRV 42 ms vs 36–58 normal, RHR 57 vs 60), 7/30-day bar chart, and a "why" paragraph that reads the component values.
+**Recovery detail** (ref `04-recovery-detail.png`) uses the same sheet but with Bevel's hero treatment: illustrated sky/landscape header whose palette follows the band (green day, amber, red), a large ring "72 % recovered" over it, then two side-by-side cards (Resting HRV 42 ms ▲ · Resting HR 57 bpm ▼), then the 🌱 insight card ("Your resting HRV is 42 ms, below your usual 47 ms, and…"), then the chart and components as above.
 
-**Trends**: metric picker (Recovery, Sleep, Strain, Stress, Energy, HRV, RHR, sleep HR, sleep stages, steps, weight, BMI, body fat, VO2max, LTHR, threshold pace, CTL/ATL/TSB, bio age) × range (1W/1M/3M/6M/1Y). Line with baseline band, weekly averages, tap-to-inspect.
+**Sleep detail** (ref `03-sleep-detail.png`, dark navy)
+```
+┌─────────────────────────────────┐
+│ ✕     Primary sleep             │
+│       Oct 13 · 23:51 – 08:07    │
+│ Sleep Stages                    │
+│ ▇ ▁▁▃▃▁▁▅▅▁▁▂▂▇▇▁▁              │  hypnogram step chart: Awake orange · REM light blue · Core/Light blue · Deep purple
+│ ☾ 11:51 PM  2 AM  4 AM  6 AM ☀ 8:07 AM │
+│ ▭ Typical range     Duration 8:16:00 │
+│ ┌ Awake 1h 9m 14 % ◔ ┐ ┌ REM 1h 1m 12 % ◔ ┐ │  2×2 stage cards with mini rings vs typical range
+│ ┌ Core  4h 34m 55 % ◑ ┐ ┌ Deep 1h 32m 19 % ◔ ┐ │
+│ ┌ Sleep needed 8h 30m  ◯ ┐      │  ring with bed / sparkle / sun / alarm markers; need = base + debt + strain
+│ ┌ Sleep HR  avg 60 · min 50 ▁▂▃▂▁ ┐│
+│ ┌ Sleep score 68 · components ┐  │  duration, efficiency, restorative, continuity, HR dip, consistency
+└─────────────────────────────────┘
+```
 
-**Workouts**: list grouped by week with weekly totals; detail = map (if GPS), HR/pace/power/cadence/altitude charts with zone shading, laps table, HR zone time, TRIMP, aerobic/anaerobic TE (COROS) next to our strain, "steady windows used for VO2max" highlighted.
+**Trends**: metric picker (Recovery, Sleep, Strain, Stress, Energy, HRV, RHR, sleep HR, sleep stages, steps, weight, BMI, body fat, VO2max, LTHR, threshold pace, CTL/ATL/TSB, bio age) × range (1W/1M/3M/6M/1Y). Same chart component as the score detail (dots, gradient, average line, normal band), weekly averages, tap-to-inspect.
 
-**Fitness**: VO2max (ours vs COROS, CI, 3 estimators), LTHR + zones, threshold pace / critical speed curve, race predictions table, load chart (CTL/ATL/TSB vs COROS short/long), HRmax estimate, biological age card with weekly changes.
+**Workouts**: list grouped by week with weekly totals; detail = map (if GPS), HR/pace/power/cadence/altitude charts with zone shading, laps table, HR-zone time, TRIMP, aerobic/anaerobic TE (COROS) next to our strain, "steady windows used for VO2max" highlighted.
 
-**Journal**: tag grid for today (alcohol, caffeine after 2 pm, late meal, travel, sick, sauna, nap, screens in bed, custom), notes; "Insights" section listing tag → next-day recovery/sleep/HRV deltas with sample counts, hidden until n ≥ 8.
+**Fitness**: VO2max (ours vs COROS, CI, 3 estimators), LTHR + zones, threshold pace / critical-speed curve, race predictions table, load chart (CTL/ATL/TSB vs COROS short/long), HRmax estimate, and the **Biological age** screen below.
 
-**Settings**: data sources + last sync, HRmax, RHR source, sleep need, units, formula weights (advanced), export/backup.
+**Biological age** (ref `08-biological-age.png`)
+```
+┌─────────────────────────────────┐
+│          Biological Age      ⋯  │
+│      ╭──────●─────────╮         │  arc gauge, chronological age marked, marker at bio age
+│         21.4  · 1.6 years younger│
+│      Next update in 2 days      │  weekly on Monday
+│ ┌ ✓ 83 % confidence · 30 days of HRV, 28 of sleep, no body-fat data → ┐│  confidence from input coverage
+│ Age Biomarkers                  │
+│ ┌ ◔ Fitness (VO2max)  2.1 years younger  ⌄ ┐ │  group header with mini ring + contribution; expands to rows:
+│ │ VO2max   35 ──────●──── 65   −2.1 years │ │  each row = value on a min–max slider + years contribution
+│ ┌ ◔ Sleep   0.4 years younger  ⌄ ┐        │
+│ │ Time asleep 5h ───●──── 11h  −0.1 years │
+│ │ Consistency 30 % ──────● 100 % −0.3 years│
+│ ┌ ◔ Heart   RHR, HRV rows ┐  ┌ ◔ Body  BMI, body-fat rows ┐  ┌ ◔ Activity  steps, MET-min ┐ │
+└─────────────────────────────────┘
+```
 
-Visual: dark theme default, light optional; one accent per score; system font; 16 px gutters; everything readable at iPhone width.
+**Journal**: tag grid for today (alcohol, caffeine after 2 pm, late meal, travel, sick, sauna, nap, screens in bed, custom), notes; "Insights" section listing tag → next-day recovery/sleep/HRV deltas with sample counts, hidden until n ≥ 8. The status chip on Today ("Active / Rest day / Sick / Travel") writes here.
+
+**Settings**: data sources + last sync, HealthKit permissions, HRmax, RHR source, sleep need, units, formula weights (advanced), export/backup.
+
+Out of scope but visible on Bevel's site, kept as later options: nutrition tracking (ref 05), health records / labs feeding biological age (ref 06), AI chat over your data (ref 07, phase 6 with the Claude API).
 
 ---
 
@@ -337,15 +391,15 @@ Each phase ends with something usable and a short writeup. Estimates assume part
 
 | Phase | Deliverable | Done when |
 |---|---|---|
-| **0. Scaffold** (1 day) | Monorepo (`backend/`, `app/`, `docs/`), Docker Compose, CI (ruff, pytest, tsc, eslint), `.env.example`, CLAUDE.md | `make dev` brings up API + app with a hello-world page |
-| **1. Ingestion** (3–5 days) | `CorosSource` (MCP first, Hub API fallback), full backfill of activities + FIT + daily data, Apple Health ingest endpoint + Health Auto Export recipe, raw blob store, `health sync` cron | 12 months of history on disk; `health show today` prints COROS's recovery/sleep/HRV/RHR from our DB |
+| **0. Scaffold** (1–2 days) | Monorepo (`backend/`, `app/`, `docs/`), Docker Compose, CI (ruff, pytest, tsc, eslint, jest), `.env.example`, CLAUDE.md; Expo project with EAS configured; you create the Apple Developer account and run one dev build on your phone | `make dev` brings up the API; the dev build opens on your iPhone and shows a hello screen fed by the API |
+| **1. Ingestion** (3–5 days) | `CorosSource` (MCP first, Hub API fallback), full backfill of activities + FIT + daily data, raw blob store, `health sync` cron; in the app: HealthKit permissions, anchored queries, background delivery, POST to `/ingest/apple-health`; weight captured from the COROS profile on every sync | 12 months of history on disk; `health show today` prints COROS's recovery/sleep/HRV/RHR from our DB |
 | **2. Engine v1** (3–5 days) | nightly HRV, sleep score, recovery, strain, stress, energy, CTL/ATL/TSB; backtest notebook comparing ours vs COROS over the backfill | Correlation + bias report in `docs/engine/backtest-v1.md`; formulas tuned so disagreement is explainable |
 | **3. Fitness models** (5–8 days) | HRmax estimate, steady-window extractor, VO2max ×3, LTHR ×3, critical speed, race predictions, blending + CIs | Report vs COROS and vs any real race; unit tests on fixture FITs |
-| **4. App v1** (5–8 days) | Today, score detail, Trends, Workouts list/detail, Settings; PWA install; screenshots in CI | Daily use replaces the COROS app for "how am I" |
+| **4. App v1** (6–10 days) | Today, score-detail sheet, Recovery hero, Sleep detail (hypnogram), Trends, Workouts list/detail, Settings; shared chart/ring/sparkline components in Skia; component tests + screenshot tests in CI | Daily use replaces the COROS app for "how am I" |
 | **5. Fitness + journal UI** (3–5 days) | Fitness tab, biological age, Journal + correlations, rule-based insights | |
-| **6. Polish** (ongoing) | notifications (morning recovery push), LLM daily note (Claude API), native iOS client if wanted, widgets | |
+| **6. Polish** (ongoing) | morning recovery push, LLM daily insight / chat over your data (Claude API), home-screen widget via a Swift extension, TestFlight release | |
 
-Suggested first session after this doc is approved: phase 0 + the MCP-client spike from phase 1 (can our backend authenticate to `mcp.coros.com`?), because that answer decides whether the unofficial API work is needed at all.
+Suggested first session after this doc is approved: phase 0 + the MCP-client spike from phase 1 (can our backend authenticate to `mcp.coros.com`?), because that answer decides whether the unofficial API work is needed at all. In parallel you set up the Apple Developer account so the first dev build can go on your phone.
 
 ---
 
@@ -355,18 +409,21 @@ Suggested first session after this doc is approved: phase 0 + the MCP-client spi
 - **FIT download quota.** COROS limits daily FIT downloads. Backfill over several days; never re-download.
 - **HRmax drives everything in 6.5.** A wrong HRmax shifts VO2max by ~1 ml/kg/min per 3 bpm. Mitigation: estimate from data, show the sensitivity, encourage a real test.
 - **Small-n statistics.** Journal correlations and bio-age will be noisy for months. Show sample sizes and CIs; hide below thresholds.
-- **Apple Health via webhook is not instant** (PWA path). Acceptable for weight/BMI; if daily-grained Apple data becomes important, go native.
+- **Native build loop.** HealthKit cannot be exercised in this cloud session; every HealthKit change needs a dev build on your phone to verify. Keep the HealthKit layer thin and well-logged so most work stays in testable TypeScript.
+- **Weight source.** If the scale writes only to COROS (not Apple Health), weight history is limited to what we capture at sync time going forward.
 - **Scope creep toward COROS's planner / Bevel's AI coach.** Both explicitly deferred.
 
 ---
 
 ## 10. Open items (need your input)
 
-1. **Client**: PWA first (recommended) or native SwiftUI from the start?
+1. ~~Client~~ — decided: native iOS via React Native / Expo (4.1).
 2. **HRmax**: field test is now in your COROS workout library (`docs/engine/hrmax-test.md`); tell me a date to schedule it. Any recent race results (date, distance, time) to validate VO2max against?
 3. **COROS → Apple Health sync**: is it enabled on your phone today, and do you have any other HealthKit writers (scale, Apple Watch)?
 4. **Hosting**: run on a home machine (Docker) or a small cloud box?
-5. **Bevel screenshots**: this cloud environment's network policy blocks `bevel.health`, `help.bevel.health`, `apps.apple.com` and Apple's image CDN `*.mzstatic.com`, so I cannot pull them. Either allow those domains in the environment settings and I will fetch them, or drop screenshots into `docs/reference/bevel/` (Today, a score detail, Trends, Workout detail, Biological Age). Then I will refine the wireframes in section 7 to match them one-for-one.
+5. ~~Bevel screenshots~~ — received and filed in `docs/reference/bevel/`; section 7 now mirrors them. Still useful if you have them: the Trends tab, a workout detail, and the Journal screen (from inside the app rather than the marketing site).
+7. **Apple Developer account**: do you have one? Needed for TestFlight / internal builds.
+8. **Smart scale app**: which scale, and does its own app write to Apple Health?
 6. **Units**: km and kg assumed.
 
 ---
