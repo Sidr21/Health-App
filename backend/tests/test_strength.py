@@ -344,3 +344,27 @@ def test_compute_day_stores_muscular_score():
         assert row.value > 0
         assert row.components["method"]["name"] == "muscles_v1"
         assert row.components["freshness"]["quads"] < 100
+
+
+@pytest.mark.usefixtures("tmp_db")
+def test_api_session_time_zones():
+    c = _client()
+    one = [{"exercise": "Squat", "reps": 5, "weight": 100}]
+    # an aware UTC instant is stored as is; its local day comes from the user's time zone
+    r = c.post(
+        "/strength/sessions",
+        json={"started_at": "2026-10-01T01:30:00Z", "unit": "kg", "sets": one},
+        headers=H,
+    )
+    assert r.status_code == 200
+    with dbmod.session_scope() as s:
+        from health.models import StrengthSet
+
+        row = s.execute(select(StrengthSet)).scalar_one()
+        assert row.ts == datetime(2026, 10, 1, 1, 30) and row.date == date(2026, 9, 30)
+    future = c.post(
+        "/strength/sessions",
+        json={"started_at": "2099-01-01T00:00:00Z", "unit": "kg", "sets": one},
+        headers=H,
+    )
+    assert future.status_code == 422

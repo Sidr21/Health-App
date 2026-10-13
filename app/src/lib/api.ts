@@ -66,6 +66,70 @@ export interface HKSampleOut {
   source: string;
 }
 
+export type MuscleId =
+  | "chest" | "shoulders" | "biceps" | "triceps" | "forearms" | "abs" | "obliques" | "traps"
+  | "lats" | "lower_back" | "glutes" | "quads" | "hamstrings" | "adductors" | "calves";
+
+export type MuscleStatus = "recovered" | "fatigued" | "depleted";
+
+export interface MuscleStateOut {
+  id: MuscleId;
+  name: string;
+  views: ("front" | "back")[];
+  freshness: number;
+  status: MuscleStatus;
+  fatigue: number;
+  load_7d: number;
+  sets_7d: number;
+  volume_7d_kg: number;
+  last_trained: string | null;
+  sources: Partial<Record<"strength" | "cardio", number>>;
+}
+
+export interface StrengthSession {
+  key: string;
+  source: "coros" | "strong" | "hevy" | "manual";
+  name: string | null;
+  start: string;
+  date: string;
+  sets: number;
+  volume_kg: number;
+  exercises: { name: string; sets: number; reps: number; best_weight_kg: number | null; best_reps: number | null }[];
+}
+
+export interface StrengthSummary {
+  date: string;
+  at: string;
+  method: { name: string; freshness_k: number; inputs: { sets: number; activities: number; duplicates_dropped: number } };
+  muscles: MuscleStateOut[];
+  totals: { sets_7d: number; volume_7d_kg: number; sessions_7d: number; sets_prev_7d: number; volume_prev_7d_kg: number };
+  load: { acute: number; chronic: number | null; ratio: number | null; optimal: [number, number] | null; status: string };
+  daily: { date: string; sets: number; volume_kg: number; load: number }[];
+  sessions: StrengthSession[];
+}
+
+export interface CommonExercise {
+  name: string;
+  family: string;
+  primary: MuscleId;
+  muscles: Partial<Record<MuscleId, number>>;
+}
+
+export interface LogSetIn {
+  exercise: string;
+  reps: number | null;
+  weight: number | null;
+  set_type?: "normal" | "warmup" | "dropset" | "failure";
+}
+
+export interface LogSessionIn {
+  started_at?: string;
+  name?: string | null;
+  unit: "lb" | "kg";
+  session_key?: string;
+  sets: LogSetIn[];
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -90,6 +154,13 @@ export const api = {
   today: () => request<DayPayload>("/today"),
   days: (start: string, end: string) => request<DayPayload[]>(`/days?start=${start}&end=${end}`),
   activities: (limit = 50) => request<DayPayload["activities"]>(`/activities?limit=${limit}`),
+  strength: (date: string) => request<StrengthSummary>(`/strength?date=${date}`),
+  strengthExercises: () =>
+    request<{ common: CommonExercise[]; muscles: { id: MuscleId; name: string; views: string[] }[] }>("/strength/exercises"),
+  logStrength: (body: LogSessionIn) =>
+    request<{ session_key: string; sets: number }>("/strength/sessions", { method: "POST", body: JSON.stringify(body) }),
+  deleteStrength: (key: string, source = "manual") =>
+    request<{ deleted: number }>(`/strength/sessions/${encodeURIComponent(key)}?source=${source}`, { method: "DELETE" }),
   ingestAppleHealth: (samples: HKSampleOut[]) =>
     request<{ stored: number; skipped: number; unknown_type: number }>("/ingest/apple-health", {
       method: "POST",

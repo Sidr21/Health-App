@@ -54,6 +54,13 @@ def test_unknown_exercise_spreads_over_whole_body():
     assert not m.matched and len(m.muscles) > 5
 
 
+def test_common_exercises_all_matched():
+    from health.engine.muscles import COMMON_EXERCISES, common_exercises
+
+    assert all(exercise_muscles(n).matched for n in COMMON_EXERCISES)
+    assert len(common_exercises()) == len(COMMON_EXERCISES)
+
+
 def test_catalog_unique_and_valid():
     names = [c["name"] for c in catalog()]
     assert len(names) == len(set(names))

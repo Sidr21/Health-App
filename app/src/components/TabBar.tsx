@@ -1,4 +1,5 @@
 import { LinearGradient } from "expo-linear-gradient";
+import { router } from "expo-router";
 import React, { type ComponentType } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -57,7 +58,7 @@ export function TabBar({ state, descriptors, navigation }: TabBarProps) {
           })}
         </LinearGradient>
         <LinearGradient colors={[...PILL]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.fab}>
-          <Pressable style={styles.fabInner} accessibilityLabel="Add">
+          <Pressable style={styles.fabInner} accessibilityLabel="Log a lift" onPress={() => router.push("/strength/log")}>
             <PlusIcon size={26} color={colors.text} />
           </Pressable>
         </LinearGradient>

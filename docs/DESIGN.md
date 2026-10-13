@@ -181,7 +181,8 @@ hrv_samples      ts, rmssd_ms, confidence, context(sleep|stress|check)
 stress_samples   ts, stress, stress_hrv, stress_hr
 body_metrics     ts, source, metric(weight_kg|bmi|body_fat_pct|lean_kg|bp_sys|bp_dia|...), value
 journal          date, tag, value(bool|number), note
-scores           date, kind(recovery|sleep|strain|stress|energy), value, components_json, version
+scores           date, kind(recovery|sleep|strain|stress|energy|muscular), value, components_json, version
+strength_sets    source(coros|strong|hevy|manual), session_key, activity_id?, ts, date, exercise, set_idx, set_type, reps, weight_kg, is_bodyweight, rpe, avg_hr
 fitness          date, metric(vo2max|lthr|threshold_pace|critical_speed|d_prime|hr_max_est|
                  ctl|atl|tsb|bio_age|race_5k|race_10k|race_hm|race_m), value, ci_low, ci_high,
                  method, inputs_json, coros_value, version
@@ -294,8 +295,28 @@ Screen shows the number, delta vs chronological age, and a "this week's changes"
 - **Cardio focus**: time share in Low aerobic (Z0–Z2), High aerobic (Z3–Z4), Anaerobic (Z5), each with its TRIMP points.
 - **Cardio load** (Bevel's gauge "27 · Productive, optimal 20–32") = our ATL/CTL in one number: 7-day TRIMP sum scaled, with status from the ACWR band (< 0.8 Detraining, 0.8–1.3 Productive/Maintaining, 1.3–1.5 Overreaching, > 1.5 Overload) and the optimal band drawn on the arc.
 - **Heart-rate recovery (HRR)**: HR drop in the 60 s after the end of the final effort. Measured from the FIT stream when the recording continues past the effort (cool-down present); otherwise from the largest 60 s drop following any ≥ 3 min segment above Z3. Rated Poor/Fair/Good/Excellent/Superior on age-standardised cut-offs (Bevel's: 15 / 32 / 40 / 49 bpm); charted as the 1-minute decline and trended on the Fitness tab.
-- **Muscular load / muscle breakdown / muscle freshness** (Bevel's strength section): v2. A sport → muscle-share table (run: quads 30, glutes 25, calves 20, hamstrings 15, hip flexors 10) times activity strain gives per-muscle load; freshness decays back to 100 % over 48–72 h. Strength sessions get their share from COROS's exercise list when present.
+- **Muscular load / muscle breakdown / muscle freshness** (Bevel's strength section): built, see §6.10.
 - **Cumulative cards**: active duration and active energy this period as a cumulative line vs the previous period (the grey line underneath).
+
+### 6.10 Strength: muscle freshness, muscular load, sets and volume
+
+Code: `engine/muscles.py` (pure), `compute.strength_summary`, `GET /strength`.
+
+**Sources of sets** (`strength_sets` table, one row per set, `ts` UTC + local `date`):
+- **COROS strength mode.** `queryActivityLapData` returns one lap per set or rest with the exercise name, reps, time and `weight` in grams. Rest laps carry the profile body weight as a default, so a set with that weight is stored as bodyweight (no load). Per-exercise summary rows (`sets` > 0) fill in sets that have no reps lap.
+- **Strong / Hevy CSV exports** (`health strength import file.csv`, or `POST /import/strength-csv`). Header auto-detected; warm-ups, drop sets and failure sets kept as set types; local times converted with the user's time zone.
+- **Logged in the app** (`POST /strength/sessions`, the + button).
+- When a logged or imported session overlaps a COROS strength activity (±30 min), the COROS copy is dropped because the other source has the weights.
+
+**Exercise → muscles.** A first-match regex table maps exercise names to muscle weights with fractional set counting: the prime mover gets 1.0 per working set, synergists 0.2–0.7 (bench press: chest 1, triceps 0.5, shoulders 0.4). Unknown names spread over the whole body. 15 groups: chest, shoulders, biceps, triceps, forearms, abs, obliques, traps, lats, lower back, glutes, quads, hamstrings, adductors, calves.
+
+**Cardio loads muscles too.** A workout without sets is converted at 10 COROS training-load points per set-equivalent (fallback: duration × a per-sport rate) and split by sport shares (run: quads 30 %, glutes 25 %, calves 20 %, hamstrings 15 %, core 10 %; ride: quads 45 %, glutes 25 % ...).
+
+**Freshness.** Fatigue F = Σ dose · exp(−Δt/τ), τ = 18–34 h by muscle size. Freshness = 100 · exp(−F/6). Eight hard sets leave a muscle ~26 % fresh, ~72 % after two days and ~85 % after three. Bands: Recovered ≥ 80 %, Fatigued 50–79 %, Depleted < 50 %.
+
+**Muscular load** = set-equivalents over the last 7 days, all muscles. Optimal band 0.8–1.3 × the 28-day weekly average (needs two weeks of history), with the same status words as cardio load. Stored daily as `scores.kind = "muscular"` with per-muscle freshness and the method in `components`.
+
+**Totals.** Sets = working sets (no warm-ups). Volume = Σ reps × weight; bodyweight sets add sets but no volume.
 
 ---
 
@@ -384,8 +405,10 @@ Empty state before baselines exist: rings show "– %" and the card says "Nothin
 │ ┌ VO₂max 51.5 (COROS 56) ┐ ┌ HR recovery 28 bpm · Fair ╱╲ ┐│
 │ ┌ Cardio focus 41 % High aerobic ▬▬ ┐ ┌ HR zones Z0 4h 22m ▮▮▮ ┐│
 │ Fitness models               → │  our addition: LTHR, threshold pace, critical-speed curve, race predictions, HRmax
-│ Strength                    Edit│
-│ ┌ Total sets ┐ ┌ Total volume ┐ ┌ Muscle freshness grid ┐ │  v2 (6.9)
+│ Strength               [+ Log lift]│
+│ ┌ Sets · 7 days 12 ▲4 ▁▃▅ ┐ ┌ Volume · 7 days 8,450 lb ▁▃▅ ┐│  7 daily bars, delta vs prior week
+│ ┌ Muscle freshness → front/back map, "2 fatigued", 6 most tired muscles with pips ┐│  6.10
+│ ┌ Session: name · date · source, sets, volume, top exercises ┐ │
 │ (🏃)                        (+) │
 └─────────────────────────────────┘
 ```
@@ -438,7 +461,11 @@ The status chip on Home ("Active / Rest day / Sick / Travel") writes a journal e
 
 **Settings**: data sources + last sync, HealthKit permissions, HRmax, RHR source, sleep need, units, zone scheme (LTHR vs %HRmax), formula weights (advanced), export/backup.
 
-Out of scope but visible in Bevel, kept as later options: nutrition (ref 05), health records / labs feeding biological age (ref 06), AI chat over your data (ref 07, phase 6), training-plan builder and routines (ref 10, COROS already does this), strength muscle model (ref 14, 16, v2).
+Out of scope but visible in Bevel, kept as later options: nutrition (ref 05), health records / labs feeding biological age (ref 06), AI chat over your data (ref 07, phase 6), training-plan builder and routines (ref 10, COROS already does this).
+
+**Muscle groups** (sheet from the freshness card; ref Bevel's strength screens): Freshness / Load / Volume segmented control; front and back body maps tinted per mode (freshness: mint/amber/red by status, faint for recovered; load: blue scale; volume: cyan scale); status filter chips; day stepper; muscle list sorted most-tired or most-worked first, each with a cropped body thumbnail and a 10-pip meter. The body map is a stylised mannequin with faceted muscle plates rather than Bevel's anatomical drawing.
+
+**Log lift** (sheet from + and "Log lift"): workout name, Today/Yesterday, lb/kg, exercise blocks with suggestions (each showing the muscles it counts toward), set rows of reps × weight (empty weight = bodyweight).
 
 **Biological age** (ref `08-biological-age.png`)
 ```

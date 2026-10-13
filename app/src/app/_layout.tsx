@@ -33,6 +33,8 @@ export default function RootLayout() {
             <Stack.Screen name="sleep/night" options={{ presentation: "modal" }} />
             <Stack.Screen name="recovery" />
             <Stack.Screen name="settings" options={{ presentation: "modal" }} />
+            <Stack.Screen name="muscles" options={{ presentation: "modal" }} />
+            <Stack.Screen name="strength/log" options={{ presentation: "modal" }} />
           </Stack>
         </QueryClientProvider>
       </SafeAreaProvider>

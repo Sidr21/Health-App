@@ -17,7 +17,7 @@ from health.api.auth import require_token
 from health.compute import strength_summary
 from health.config import settings
 from health.db import get_session, init_db
-from health.engine.muscles import MUSCLES, catalog
+from health.engine.muscles import MUSCLES, catalog, common_exercises
 from health.models import (
     Activity,
     BodyMetric,
@@ -224,6 +224,7 @@ def strength(
 def strength_exercises() -> dict:
     return {
         "exercises": catalog(),
+        "common": common_exercises(),
         "muscles": [{"id": m.id, "name": m.name, "views": list(m.views)} for m in MUSCLES.values()],
     }
 
@@ -251,6 +252,8 @@ def log_strength_session(body: SessionIn, s: Session = Depends(get_session)) -> 
     start = body.started_at or datetime.now(zone)
     if start.tzinfo is None:
         start = start.replace(tzinfo=zone)
+    if start > datetime.now(UTC) + timedelta(minutes=15):
+        raise HTTPException(422, "started_at is in the future")
     key = body.session_key or f"manual-{uuid.uuid4().hex[:12]}"
     factor = LB if body.unit == "lb" else 1.0
     sets = []

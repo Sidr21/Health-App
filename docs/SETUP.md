@@ -23,6 +23,11 @@ Hub API implementation described in `docs/DESIGN.md` §3.1.
 Manual import without the MCP (works today): paste a tool output from Claude into a file and run
 `uv run health coros import querySleepHrv path/to/file.txt`.
 
+Lifting from other apps: export from Strong (Settings → Export data) or Hevy (Settings → Export &
+import data → Export workouts) and run `uv run health strength import export.csv` (add `--unit kg`
+for a Strong export in kilograms without a unit column). Re-importing replaces the same sessions.
+`uv run health strength show today` prints muscle freshness and load.
+
 ## 2. App (development build on your phone, free Apple ID)
 ```bash
 cd app

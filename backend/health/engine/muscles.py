@@ -263,6 +263,65 @@ def exercise_muscles(exercise: str) -> ExerciseMatch:
     return ExerciseMatch("Unknown", dict(WHOLE_BODY), False)
 
 
+COMMON_EXERCISES = [
+    "Bench Press",
+    "Incline Bench Press",
+    "Dumbbell Bench Press",
+    "Push-Up",
+    "Dip",
+    "Chest Fly",
+    "Overhead Press",
+    "Lateral Raise",
+    "Face Pull",
+    "Shrug",
+    "Pull-Up",
+    "Chin-Up",
+    "Lat Pulldown",
+    "Barbell Row",
+    "Seated Cable Row",
+    "Biceps Curl",
+    "Hammer Curl",
+    "Triceps Pushdown",
+    "Skull Crusher",
+    "Back Squat",
+    "Front Squat",
+    "Leg Press",
+    "Bulgarian Split Squat",
+    "Lunge",
+    "Deadlift",
+    "Romanian Deadlift",
+    "Hip Thrust",
+    "Back Extension",
+    "Leg Extension",
+    "Leg Curl",
+    "Calf Raise",
+    "Hip Adduction",
+    "Plank",
+    "Crunch",
+    "Hanging Leg Raise",
+    "Russian Twist",
+    "Kettlebell Swing",
+    "Farmer's Carry",
+    "Box Jump",
+]
+
+
+def common_exercises() -> list[dict]:
+    """Names offered by the app's log screen, each with the muscles the matcher assigns."""
+    out = []
+    for name in COMMON_EXERCISES:
+        m = exercise_muscles(name)
+        out.append(
+            {
+                "name": name,
+                "family": m.name,
+                "primary": max(m.muscles, key=lambda k: m.muscles[k]),
+                "muscles": m.muscles,
+            }
+        )
+    return out
+
+
 def catalog() -> list[dict]:
     """Exercise families the matcher knows, for the app's picker."""
     seen: dict[str, dict] = {}

@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -9,9 +10,11 @@ import { Screen } from "@/components/Screen";
 import { SectionLabel } from "@/components/SectionLabel";
 import { WeekStrip, type WeekDay } from "@/components/WeekStrip";
 import { WorkoutCard } from "@/components/WorkoutCard";
+import { FreshnessCard, SessionCard, StrengthStatCards } from "@/components/StrengthWidgets";
 import { dayOfMonth, longDayLabel, weekOf, weekdayIndex, WEEKDAY_LETTERS } from "@/lib/dates";
 import { hms } from "@/lib/format";
 import { sportMeta } from "@/lib/sport";
+import { useStrength } from "@/lib/strength";
 import { todayIso, useDays } from "@/lib/useDays";
 import { colors, font, fonts, spacing } from "@/theme/tokens";
 
@@ -27,6 +30,7 @@ function loadStatus(ratio: number | null | undefined, comment: string | null | u
 export default function FitnessScreen() {
   const q = useDays(28);
   const today = todayIso();
+  const strength = useStrength(today);
   const [selected, setSelected] = useState(today);
   const week = useMemo(() => weekOf(selected), [selected]);
   const days: WeekDay[] = week.map((iso) => {
@@ -79,9 +83,17 @@ export default function FitnessScreen() {
           status={loadStatus(latest?.daily.coros_load_ratio, latest?.daily.coros_load_comment)}
           color={colors.cardio}
         />
-        <Gauge title="Muscular" value={null} min={0} max={100} optimal={[33, 74]} status="Coming soon" color={colors.muscular} />
+        <Gauge
+          title="Muscular"
+          value={strength.data ? Math.round(strength.data.load.acute) : null}
+          min={0}
+          max={Math.max(40, Math.ceil(((strength.data?.load.optimal?.[1] ?? strength.data?.load.acute ?? 30) * 1.4) / 10) * 10)}
+          optimal={strength.data?.load.optimal ? [Math.round(strength.data.load.optimal[0]), Math.round(strength.data.load.optimal[1])] : [0, 0]}
+          status={strength.data?.load.status ?? null}
+          color={colors.muscular}
+        />
       </View>
-      <Text style={styles.footnote}>Cardio load is COROS&apos;s short-term load vs its long-term load until our TRIMP-based load lands (phase 2).</Text>
+      <Text style={styles.footnote}>Cardio is COROS&apos;s short- vs long-term load until our TRIMP load lands. Muscular is set-equivalents over 7 days, from lifting and cardio.</Text>
 
       <SectionLabel title="Cardio" action={<Text style={styles.edit}>Edit</Text>} />
       <View style={styles.grid}>
@@ -106,6 +118,34 @@ export default function FitnessScreen() {
           <Text style={styles.cardSub}>60 s drop after hard efforts, from FIT streams</Text>
         </Card>
       </View>
+
+      <SectionLabel
+        title="Strength"
+        action={
+          <Pressable onPress={() => router.push("/strength/log")} style={styles.logBtn}>
+            <PlusIcon size={13} color={colors.text} />
+            <Text style={styles.logText}>Log lift</Text>
+          </Pressable>
+        }
+      />
+      {strength.data ? (
+        <>
+          <StrengthStatCards s={strength.data} />
+          <FreshnessCard s={strength.data} />
+          {strength.data.sessions.length ? (
+            strength.data.sessions.map((x) => <SessionCard key={`${x.source}:${x.key}`} x={x} />)
+          ) : (
+            <Card>
+              <Text style={styles.emptyTitle}>No lifting in the last 7 days</Text>
+              <Text style={styles.cardSub}>Log a session with +, record it on your COROS in strength mode, or import a Strong or Hevy export.</Text>
+            </Card>
+          )}
+        </>
+      ) : (
+        <Card>
+          <Text style={styles.cardSub}>{strength.isError ? `Cannot reach the backend (${String(strength.error)})` : "Loading strength…"}</Text>
+        </Card>
+      )}
     </Screen>
   );
 }
@@ -128,4 +168,7 @@ const styles = StyleSheet.create({
   cardUnit: { fontSize: 13, fontFamily: fonts.label, color: colors.textMuted },
   cardPending: { ...font.heading, fontSize: 15, color: colors.textMuted, marginTop: 10 },
   cardSub: { ...font.caption, color: colors.textFaint, marginTop: 4 },
+  emptyTitle: { ...font.heading, fontSize: 15, color: colors.text },
+  logBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.08)" },
+  logText: { ...font.label, color: colors.text },
 });
