@@ -22,6 +22,10 @@ export default function RootLayout() {
           <StatusBar style="light" />
           <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
             <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="sleep/index" />
+            <Stack.Screen name="sleep/night" options={{ presentation: "modal" }} />
+            <Stack.Screen name="recovery" />
+            <Stack.Screen name="settings" options={{ presentation: "modal" }} />
           </Stack>
         </QueryClientProvider>
       </SafeAreaProvider>

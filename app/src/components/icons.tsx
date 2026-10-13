@@ -207,3 +207,66 @@ export const RouteIcon = ({ size = 14, color = "#fff", strokeWidth = 1.8 }: Icon
     <Line x1="19" y1="10" x2="19" y2="14" {...stroke(color, strokeWidth)} />
   </Svg>
 );
+
+export const BoltIcon = ({ size = 16, color = "#fff", strokeWidth = 1.8 }: IconProps) => (
+  <Svg {...base(size)}>
+    <Path d="M13 2 4 14h7l-1 8 9-12h-7z" fill={color} stroke={color} strokeWidth={strokeWidth * 0.5} strokeLinejoin="round" />
+  </Svg>
+);
+
+export const ShareIcon = ({ size = 18, color = "#fff", strokeWidth = 1.8 }: IconProps) => (
+  <Svg {...base(size)}>
+    <Path d="M12 15V4" {...stroke(color, strokeWidth)} />
+    <Polyline points="8 8 12 4 16 8" {...stroke(color, strokeWidth)} />
+    <Path d="M6 11v8a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-8" {...stroke(color, strokeWidth)} />
+  </Svg>
+);
+
+export const LungsIcon = ({ size = 14, color = "#fff", strokeWidth = 1.8 }: IconProps) => (
+  <Svg {...base(size)}>
+    <Path d="M12 4v8" {...stroke(color, strokeWidth)} />
+    <Path d="M10 9c-3 0-5 3-5 8 0 2 1 3 2 3s3-1 3-3z" {...stroke(color, strokeWidth)} />
+    <Path d="M14 9c3 0 5 3 5 8 0 2-1 3-2 3s-3-1-3-3z" {...stroke(color, strokeWidth)} />
+  </Svg>
+);
+
+export const DropIcon = ({ size = 14, color = "#fff", strokeWidth = 1.8 }: IconProps) => (
+  <Svg {...base(size)}>
+    <Path d="M12 3s6 7 6 11a6 6 0 0 1-12 0c0-4 6-11 6-11z" {...stroke(color, strokeWidth)} />
+  </Svg>
+);
+
+export const ThermoIcon = ({ size = 14, color = "#fff", strokeWidth = 1.8 }: IconProps) => (
+  <Svg {...base(size)}>
+    <Path d="M10 4a2 2 0 0 1 4 0v9.5a4 4 0 1 1-4 0z" {...stroke(color, strokeWidth)} />
+    <Circle cx="12" cy="17" r="1.5" fill={color} />
+  </Svg>
+);
+
+export const BedIcon = ({ size = 14, color = "#fff", strokeWidth = 1.8 }: IconProps) => (
+  <Svg {...base(size)}>
+    <Path d="M3 18v-7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v7" {...stroke(color, strokeWidth)} />
+    <Path d="M3 15h18" {...stroke(color, strokeWidth)} />
+    <Path d="M6 9V7a1 1 0 0 1 1-1h4v3" {...stroke(color, strokeWidth)} />
+  </Svg>
+);
+
+export const ClockIcon = ({ size = 14, color = "#fff", strokeWidth = 1.8 }: IconProps) => (
+  <Svg {...base(size)}>
+    <Circle cx="12" cy="12" r="8.5" {...stroke(color, strokeWidth)} />
+    <Polyline points="12 7.5 12 12 15 14" {...stroke(color, strokeWidth)} />
+  </Svg>
+);
+
+export const CloseIcon = ({ size = 18, color = "#fff", strokeWidth = 2 }: IconProps) => (
+  <Svg {...base(size)}>
+    <Line x1="6" y1="6" x2="18" y2="18" {...stroke(color, strokeWidth)} />
+    <Line x1="18" y1="6" x2="6" y2="18" {...stroke(color, strokeWidth)} />
+  </Svg>
+);
+
+export const ChevronLeft = ({ size = 16, color = "#fff", strokeWidth = 2 }: IconProps) => (
+  <Svg {...base(size)}>
+    <Polyline points="15 6 9 12 15 18" {...stroke(color, strokeWidth)} />
+  </Svg>
+);

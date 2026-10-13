@@ -1,11 +1,15 @@
 /** Dark design tokens matching Bevel's in-app screens (docs/reference/bevel/09–16). */
 export const colors = {
-  bg: "#121316",
-  card: "#1E1F24",
-  cardRaised: "#2A2B31",
-  pill: "#25262C",
-  border: "#2F3037",
-  hairline: "#34353C",
+  bg: "#0E0F13",
+  card: "#1A1B22",
+  cardRaised: "#262830",
+  pill: "#1F2027",
+  border: "#2A2B33",
+  hairline: "#30313A",
+  // sleep screens use a navy palette
+  sleepBg: "#0F1226",
+  sleepCard: "#1A1F3E",
+  sleepCardRaised: "#242A52",
   text: "#F4F4F6",
   textMuted: "#9C9DA6",
   textFaint: "#62636C",

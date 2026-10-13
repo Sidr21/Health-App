@@ -6,6 +6,7 @@ import { colors, font, radius } from "@/theme/tokens";
 
 interface Props {
   icon: ReactNode;
+  iconBg?: string;
   title: string;
   subtitle?: string;
   dropdown?: boolean;
@@ -13,15 +14,15 @@ interface Props {
 }
 
 /** Bevel's status / weather chips under the Home header. */
-export function Chip({ icon, title, subtitle, dropdown, onPress }: Props) {
+export function Chip({ icon, iconBg, title, subtitle, dropdown, onPress }: Props) {
   return (
     <Pressable onPress={onPress} style={styles.chip}>
-      <View style={styles.iconWrap}>{icon}</View>
+      <View style={[styles.iconWrap, iconBg ? { backgroundColor: iconBg } : null]}>{icon}</View>
       <View style={{ flexShrink: 1 }}>
         <Text style={styles.title} numberOfLines={1}>{title}</Text>
         {subtitle ? <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text> : null}
       </View>
-      {dropdown ? <ChevronDown size={14} color={colors.textMuted} /> : null}
+      {dropdown ? <View style={{ marginLeft: "auto" }}><ChevronDown size={14} color={colors.textMuted} /></View> : null}
     </Pressable>
   );
 }
@@ -31,13 +32,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: colors.pill,
+    backgroundColor: colors.card,
     borderRadius: radius.pill,
     paddingVertical: 7,
     paddingLeft: 7,
     paddingRight: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
+    flex: 1,
   },
   iconWrap: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.cardRaised, alignItems: "center", justifyContent: "center" },
   title: { ...font.label, color: colors.text },

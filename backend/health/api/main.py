@@ -5,13 +5,13 @@ from datetime import date, timedelta
 
 from fastapi import Depends, FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from health import __version__
 from health.api.auth import require_token
 from health.db import get_session, init_db
-from health.models import Activity, BodyMetric, Daily, Score, SleepSession, SyncLog
+from health.models import Activity, BodyMetric, Daily, Score, SleepSession, StressSample, SyncLog
 from health.sources.apple_health import HKPayload, ingest
 
 
@@ -46,6 +46,11 @@ def _day_payload(s: Session, d: date) -> dict:
         .where(Activity.start_ts >= d, Activity.start_ts < d + timedelta(days=1))
         .order_by(Activity.start_ts)
     ).scalars()
+    stress_lo, stress_hi, stress_last = s.execute(
+        select(
+            func.min(StressSample.stress), func.max(StressSample.stress), func.max(StressSample.ts)
+        ).where(StressSample.ts >= d, StressSample.ts < d + timedelta(days=1))
+    ).one()
     return {
         "date": d.isoformat(),
         "scores": _scores_for(s, d),
@@ -54,6 +59,9 @@ def _day_payload(s: Session, d: date) -> dict:
             "calories": daily.calories if daily else None,
             "rhr": daily.rhr if daily else None,
             "stress_avg": daily.stress_avg if daily else None,
+            "stress_min": stress_lo,
+            "stress_max": stress_hi,
+            "stress_updated": stress_last.isoformat() if stress_last else None,
             "coros_recovery_pct": daily.coros_recovery_pct if daily else None,
             "coros_stl": daily.coros_stl if daily else None,
             "coros_ltl": daily.coros_ltl if daily else None,

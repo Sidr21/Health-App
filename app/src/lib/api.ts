@@ -20,6 +20,9 @@ export interface DayPayload {
     calories: number | null;
     rhr: number | null;
     stress_avg: number | null;
+    stress_min: number | null;
+    stress_max: number | null;
+    stress_updated: string | null;
     coros_recovery_pct: number | null;
     coros_stl: number | null;
     coros_ltl: number | null;
