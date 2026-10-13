@@ -12,8 +12,10 @@ import typer
 app = typer.Typer(no_args_is_help=True, help="Health app backend tools")
 coros = typer.Typer(no_args_is_help=True, help="COROS (official MCP) commands")
 db = typer.Typer(no_args_is_help=True, help="Database")
+strength = typer.Typer(no_args_is_help=True, help="Strength training (lifting) data")
 app.add_typer(coros, name="coros")
 app.add_typer(db, name="db")
+app.add_typer(strength, name="strength")
 
 
 @db.command("init")
@@ -89,6 +91,39 @@ def coros_import(kind: str, path: Path, label_id: str | None = None) -> None:
     with session_scope() as s:
         n = import_text(s, kind, path.read_text(), label_id=label_id)
     typer.echo(f"imported {n} items from {path}")
+
+
+@strength.command("import")
+def strength_import(
+    path: Path,
+    unit: str = typer.Option("lb", help="Weight unit of a Strong export without a unit column"),
+) -> None:
+    """Import a Strong or Hevy CSV export (re-importing replaces the same sessions)."""
+    from health.config import settings
+    from health.db import init_db, session_scope
+    from health.sources.strength_csv import parse_csv
+    from health.sources.strength_store import replace_sessions
+
+    init_db()
+    source, sets = parse_csv(path.read_text(), unit=unit, tz=settings.timezone)
+    with session_scope() as s:
+        replace_sessions(s, source, sets)
+    days = sorted({x.day for x in sets})
+    typer.echo(f"{source}: {len(sets)} sets in {len({x.session_key for x in sets})} sessions")
+    if days:
+        typer.echo(f"{days[0]} .. {days[-1]}; run `health compute` to refresh stored scores")
+
+
+@strength.command("show")
+def strength_show(day: str = typer.Argument("today")) -> None:
+    """Print the strength summary (muscle freshness, load, sessions) for a day."""
+    from health.compute import strength_summary
+    from health.db import init_db, session_scope
+
+    init_db()
+    d = date.today() if day == "today" else date.fromisoformat(day)
+    with session_scope() as s:
+        typer.echo(json.dumps(strength_summary(s, d), indent=2, default=str))
 
 
 @app.command()

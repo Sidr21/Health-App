@@ -127,6 +127,10 @@ def store_laps(s: Session, label_id: str, laps: list[dict]) -> int:
             )
         )
         n += 1
+    from health.sources.strength_store import is_strength, store_coros_strength
+
+    if is_strength(row):
+        store_coros_strength(s, row, laps)
     return n
 
 

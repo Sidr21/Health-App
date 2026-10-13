@@ -577,3 +577,85 @@ def parse_lap_data(payload: str | dict) -> list[dict[str, Any]]:
         for lap in group.get("laps", []):
             laps.append({"group_type": gtype, **lap})
     return laps
+
+
+# ---------------------------------------------------------------- strength laps
+
+
+@dataclass
+class StrengthLapSet:
+    exercise: str
+    offset_s: float  # seconds from activity start
+    reps: int | None
+    weight_kg: float | None
+    is_bodyweight: bool
+    duration_s: float | None
+    avg_hr: int | None
+
+
+def parse_strength_laps(
+    laps: list[dict[str, Any]], body_weight_kg: float | None = None
+) -> list[StrengthLapSet]:
+    """Working sets from a COROS strength activity's lap data (the output of parse_lap_data).
+
+    COROS strength laps look like this:
+    - one lap per set or rest, with `exerciseNameKey`, `reps`, `time` (s), `totalLength`
+      (s since start) and `weight` in grams;
+    - per-exercise summary rows with `sets` > 0 (total sets, total reps, weight = volume);
+    - rest laps, and sets with no load entered, carry a default weight: the body weight from
+      the COROS profile. A set is treated as bodyweight (no lifted load) when its weight is 0,
+      is within 1 kg of `body_weight_kg`, equals the weight every rest lap carries, or equals
+      the one weight every lap carries.
+
+    When a summary says an exercise had more sets than there are laps with reps, the missing
+    sets are added with unknown reps so the set count matches what the watch shows.
+    """
+    work = [
+        lap
+        for lap in laps
+        if not lap.get("sets")
+        and (lap.get("reps") or 0) > 0
+        and lap.get("exerciseNameKey") != "Rest"
+    ]
+    plain = [lap for lap in laps if not lap.get("sets")]
+    weights = {lap.get("weight") or 0 for lap in plain}
+    rest_weights = {lap.get("weight") or 0 for lap in plain if lap.get("exerciseNameKey") == "Rest"}
+    defaults = set()
+    if len(weights) == 1:
+        defaults |= weights
+    if len(rest_weights) == 1:
+        defaults |= rest_weights
+    defaults.discard(0)
+    summary_sets: dict[str, int] = {}
+    for lap in laps:
+        name = lap.get("exerciseNameKey") or "Unknown"
+        if lap.get("sets") and name != "Rest":
+            summary_sets[name] = max(summary_sets.get(name, 0), int(lap["sets"]))
+
+    out: list[StrengthLapSet] = []
+    for lap in work:
+        grams = lap.get("weight") or 0
+        bodyweight = (
+            grams == 0
+            or grams in defaults
+            or (body_weight_kg is not None and abs(grams / 1000 - body_weight_kg) <= 1.0)
+        )
+        time = lap.get("time")
+        out.append(
+            StrengthLapSet(
+                exercise=lap.get("exerciseNameKey") or "Unknown",
+                offset_s=float((lap.get("totalLength") or 0) - (time or 0)),
+                reps=int(lap["reps"]),
+                weight_kg=None if bodyweight else round(grams / 1000, 2),
+                is_bodyweight=bodyweight,
+                duration_s=float(time) if time is not None else None,
+                avg_hr=lap.get("avgHr"),
+            )
+        )
+    for name, n in summary_sets.items():
+        have = [x for x in out if x.exercise == name]
+        last = max((x.offset_s for x in have), default=0.0)
+        for _ in range(n - len(have)):
+            out.append(StrengthLapSet(name, last, None, None, False, None, None))
+    out.sort(key=lambda x: x.offset_s)
+    return out

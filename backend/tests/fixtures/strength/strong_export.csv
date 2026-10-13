@@ -1,0 +1,13 @@
+Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,Distance,Seconds,Notes,Workout Notes,RPE
+2026-09-28 07:05:12,"Upper A",52m,"Bench Press (Barbell)",W,95,10,0,0,"","",
+2026-09-28 07:05:12,"Upper A",52m,"Bench Press (Barbell)",1,155,8,0,0,"","",8
+2026-09-28 07:05:12,"Upper A",52m,"Bench Press (Barbell)",2,155,8,0,0,"","",8.5
+2026-09-28 07:05:12,"Upper A",52m,"Bench Press (Barbell)",3,155,7,0,0,"","",9
+2026-09-28 07:05:12,"Upper A",52m,"Rest Timer",Rest Timer,0,0,0,90,"","",
+2026-09-28 07:05:12,"Upper A",52m,"Pull Up",1,0,10,0,0,"","",
+2026-09-28 07:05:12,"Upper A",52m,"Pull Up",2,0,9,0,0,"","",
+2026-09-28 07:05:12,"Upper A",52m,"Plank",1,0,0,0,60,"","",
+2026-09-30 18:40:00,"Lower A",61m,"Squat (Barbell)",1,225,5,0,0,"","",
+2026-09-30 18:40:00,"Lower A",61m,"Squat (Barbell)",2,225,5,0,0,"","",
+2026-09-30 18:40:00,"Lower A",61m,"Romanian Deadlift (Barbell)",1,185,8,0,0,"","",
+2026-09-30 18:40:00,"Lower A",61m,"Romanian Deadlift (Barbell)",D,135,10,0,0,"","",

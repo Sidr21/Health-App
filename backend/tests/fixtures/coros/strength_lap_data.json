@@ -1,0 +1,14 @@
+{"source":"activityDetail","labelId":"100000000000000004","sportType":402,"mode":23,"subMode":2,"columns":[{"name":"lapIndex","label":"Lap"},{"name":"exerciseNameKey","label":"Exercise"},{"name":"sets","label":"Sets"},{"name":"reps","label":"Reps"},{"name":"time","label":"Time"},{"name":"totalLength","label":"Total"},{"name":"weight","label":"Weight"},{"name":"avgHr","label":"Avg HR"},{"name":"maxHr","label":"Max HR"},{"name":"calories","label":"Calories"}],"lapGroups":[{"type":2,"lapDistance":100000,"fastLapIndexList":[],"laps":[
+{"lapIndex":1,"exerciseNameKey":"Barbell Back Squat","sets":0,"reps":5,"time":40.0,"totalLength":40.0,"weight":100000,"avgHr":110,"maxHr":124,"calories":9000},
+{"lapIndex":2,"exerciseNameKey":"Rest","sets":0,"reps":0,"time":120.0,"totalLength":160.0,"weight":70000,"avgHr":98,"maxHr":120,"calories":0},
+{"lapIndex":3,"exerciseNameKey":"Barbell Back Squat","sets":0,"reps":5,"time":42.0,"totalLength":202.0,"weight":100000,"avgHr":114,"maxHr":128,"calories":9100},
+{"lapIndex":4,"exerciseNameKey":"Rest","sets":0,"reps":0,"time":120.0,"totalLength":322.0,"weight":70000,"avgHr":100,"maxHr":122,"calories":0},
+{"lapIndex":5,"exerciseNameKey":"Barbell Back Squat","sets":0,"reps":4,"time":38.0,"totalLength":360.0,"weight":102500,"avgHr":117,"maxHr":131,"calories":8800},
+{"lapIndex":6,"exerciseNameKey":"Rest","sets":0,"reps":0,"time":90.0,"totalLength":450.0,"weight":70000,"avgHr":101,"maxHr":118,"calories":0},
+{"lapIndex":7,"exerciseNameKey":"Push-Up","sets":0,"reps":15,"time":30.0,"totalLength":480.0,"weight":70000,"avgHr":105,"maxHr":115,"calories":5000},
+{"lapIndex":8,"exerciseNameKey":"Rest","sets":0,"reps":0,"time":60.0,"totalLength":540.0,"weight":70000,"avgHr":99,"maxHr":110,"calories":0},
+{"lapIndex":9,"exerciseNameKey":"Push-Up","sets":0,"reps":12,"time":28.0,"totalLength":568.0,"weight":70000,"avgHr":107,"maxHr":117,"calories":4800},
+{"lapIndex":10,"exerciseNameKey":"Barbell Back Squat","sets":3,"reps":14,"time":120.0,"totalLength":568.0,"weight":1406250,"avgHr":114,"maxHr":131,"calories":26900},
+{"lapIndex":11,"exerciseNameKey":"Push-Up","sets":2,"reps":27,"time":58.0,"totalLength":568.0,"weight":1890000,"avgHr":106,"maxHr":117,"calories":9800},
+{"lapIndex":12,"exerciseNameKey":"Rest","sets":4,"reps":0,"time":390.0,"totalLength":568.0,"weight":70000,"avgHr":100,"maxHr":122,"calories":0}
+]}],"sportDataDetails":[]}

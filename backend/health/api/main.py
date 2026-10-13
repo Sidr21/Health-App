@@ -1,20 +1,36 @@
 from __future__ import annotations
 
+import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime, timedelta
+from typing import Literal
 from zoneinfo import ZoneInfo
 
-from fastapi import Depends, FastAPI, Query
+from fastapi import Body, Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import func, select
+from pydantic import BaseModel, Field
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from health import __version__
 from health.api.auth import require_token
+from health.compute import strength_summary
 from health.config import settings
 from health.db import get_session, init_db
-from health.models import Activity, BodyMetric, Daily, Score, SleepSession, StressSample, SyncLog
+from health.engine.muscles import MUSCLES, catalog
+from health.models import (
+    Activity,
+    BodyMetric,
+    Daily,
+    Score,
+    SleepSession,
+    StrengthSet,
+    StressSample,
+    SyncLog,
+)
 from health.sources.apple_health import HKPayload, ingest
+from health.sources.strength_csv import LB, ParsedSet, parse_csv
+from health.sources.strength_store import replace_sessions
 
 
 @asynccontextmanager
@@ -191,3 +207,99 @@ def sync_status(s: Session = Depends(get_session)) -> list[dict]:
         {"ts": r.ts.isoformat(), "source": r.source, "kind": r.kind, "ok": r.ok, "detail": r.detail}
         for r in rows
     ]
+
+
+# ---------------------------------------------------------------- strength
+
+
+@app.get("/strength", dependencies=[Depends(require_token)])
+def strength(
+    day: date | None = Query(None, alias="date"), s: Session = Depends(get_session)
+) -> dict:
+    """Muscle freshness, muscular load, 7-day sets/volume and recent sessions for a day."""
+    return strength_summary(s, day or datetime.now(ZoneInfo(settings.timezone)).date())
+
+
+@app.get("/strength/exercises", dependencies=[Depends(require_token)])
+def strength_exercises() -> dict:
+    return {
+        "exercises": catalog(),
+        "muscles": [{"id": m.id, "name": m.name, "views": list(m.views)} for m in MUSCLES.values()],
+    }
+
+
+class SetIn(BaseModel):
+    exercise: str = Field(min_length=1, max_length=120)
+    reps: int | None = Field(None, ge=0, le=1000)
+    weight: float | None = Field(None, ge=0, le=1000)
+    set_type: Literal["normal", "warmup", "dropset", "failure"] = "normal"
+    duration_s: float | None = Field(None, ge=0)
+
+
+class SessionIn(BaseModel):
+    started_at: datetime | None = None  # naive = local wall-clock time
+    name: str | None = Field(None, max_length=120)
+    unit: Literal["lb", "kg"] = "lb"
+    session_key: str | None = Field(None, max_length=60)
+    sets: list[SetIn] = Field(min_length=1, max_length=200)
+
+
+@app.post("/strength/sessions", dependencies=[Depends(require_token)])
+def log_strength_session(body: SessionIn, s: Session = Depends(get_session)) -> dict:
+    """Log (or replace, when `session_key` is reused) a lifting session from the app."""
+    zone = ZoneInfo(settings.timezone)
+    start = body.started_at or datetime.now(zone)
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=zone)
+    key = body.session_key or f"manual-{uuid.uuid4().hex[:12]}"
+    factor = LB if body.unit == "lb" else 1.0
+    sets = []
+    for i, x in enumerate(body.sets):
+        ts = start + timedelta(seconds=i)
+        loaded = x.weight is not None and x.weight > 0
+        sets.append(
+            ParsedSet(
+                session_key=key,
+                ts=ts.astimezone(UTC).replace(tzinfo=None),
+                day=ts.astimezone(zone).date(),
+                workout_name=body.name,
+                exercise=x.exercise.strip(),
+                set_idx=i,
+                set_type=x.set_type,
+                reps=x.reps or None,
+                weight_kg=round(x.weight * factor, 2) if loaded and x.weight else None,
+                is_bodyweight=not loaded and bool(x.reps),
+                duration_s=x.duration_s,
+            )
+        )
+    n = replace_sessions(s, "manual", sets)
+    return {"session_key": key, "sets": n}
+
+
+@app.delete("/strength/sessions/{session_key}", dependencies=[Depends(require_token)])
+def delete_strength_session(
+    session_key: str, source: str = "manual", s: Session = Depends(get_session)
+) -> dict:
+    res = s.execute(
+        delete(StrengthSet).where(
+            StrengthSet.source == source, StrengthSet.session_key == session_key
+        )
+    )
+    if not res.rowcount:
+        raise HTTPException(404, "no such session")
+    return {"deleted": res.rowcount}
+
+
+@app.post("/import/strength-csv", dependencies=[Depends(require_token)])
+def import_strength_csv(
+    text: str = Body(..., media_type="text/csv"),
+    unit: Literal["lb", "kg"] = "lb",
+    s: Session = Depends(get_session),
+) -> dict:
+    """Upload a Strong or Hevy CSV export. Re-uploading replaces the same sessions."""
+    try:
+        source, sets = parse_csv(text, unit=unit, tz=settings.timezone)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    replace_sessions(s, source, sets)
+    return {"source": source, "sets": len(sets), "sessions": len({x.session_key for x in sets})}

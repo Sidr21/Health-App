@@ -155,6 +155,36 @@ class StressSample(Base):
     stress_hr: Mapped[int | None] = mapped_column(Integer)
 
 
+class StrengthSet(Base):
+    """One set of a lifting session, from COROS strength laps, a CSV export (Strong, Hevy) or
+    logged in the app. `ts` is UTC; `date` is the local calendar day."""
+
+    __tablename__ = "strength_sets"
+    __table_args__ = (
+        UniqueConstraint("source", "session_key", "set_idx", name="uq_strength_set"),
+        Index("ix_strength_ts", "ts"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source: Mapped[str] = mapped_column(String(20))  # coros|strong|hevy|manual
+    session_key: Mapped[str] = mapped_column(String(80))
+    activity_id: Mapped[int | None] = mapped_column(
+        ForeignKey("activities.id", ondelete="SET NULL")
+    )
+    ts: Mapped[datetime] = mapped_column(DateTime)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    workout_name: Mapped[str | None] = mapped_column(String(120))
+    exercise: Mapped[str] = mapped_column(String(120))
+    set_idx: Mapped[int] = mapped_column(Integer)
+    # normal | warmup | dropset | failure
+    set_type: Mapped[str] = mapped_column(String(12), default="normal")
+    reps: Mapped[int | None] = mapped_column(Integer)
+    weight_kg: Mapped[float | None] = mapped_column(Float)
+    is_bodyweight: Mapped[bool] = mapped_column(default=False)
+    duration_s: Mapped[float | None] = mapped_column(Float)
+    rpe: Mapped[float | None] = mapped_column(Float)
+    avg_hr: Mapped[int | None] = mapped_column(Integer)
+
+
 class BodyMetric(Base):
     __tablename__ = "body_metrics"
     __table_args__ = (UniqueConstraint("source", "external_id", name="uq_body_source_ext"),)
@@ -182,7 +212,7 @@ class Score(Base):
     __table_args__ = (UniqueConstraint("date", "kind", name="uq_score_date_kind"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     date: Mapped[date] = mapped_column(Date, index=True)
-    kind: Mapped[str] = mapped_column(String(20))  # recovery|sleep|strain|stress|energy
+    kind: Mapped[str] = mapped_column(String(20))  # recovery|sleep|strain|stress|energy|muscular
     value: Mapped[float] = mapped_column(Float)
     components: Mapped[dict | None] = mapped_column(JSON)
     version: Mapped[int] = mapped_column(Integer, default=1)
