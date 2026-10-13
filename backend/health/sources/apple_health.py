@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from health.models import BodyMetric
+from health.config import settings
+from health.models import BodyMetric, SleepSegment
 
 # HKQuantityTypeIdentifier -> (metric, canonical unit)
 TYPE_MAP: dict[str, tuple[str, str]] = {
@@ -27,6 +29,10 @@ TYPE_MAP: dict[str, tuple[str, str]] = {
     "HKQuantityTypeIdentifierDietaryWater": ("water_ml", "mL"),
     "HKQuantityTypeIdentifierDietaryCaffeine": ("caffeine_mg", "mg"),
 }
+
+SLEEP_TYPE = "HKCategoryTypeIdentifierSleepAnalysis"
+# HKCategoryValueSleepAnalysis -> our stage names (core sleep is what other apps call light)
+SLEEP_STAGES = {0: "inbed", 1: "asleep", 2: "awake", 3: "light", 4: "deep", 5: "rem"}
 
 _UNIT_FACTORS = {  # (from unit, to unit) -> multiplier
     ("lb", "kg"): 0.45359237,
@@ -64,9 +70,48 @@ def _normalise(value: float, unit: str, target: str) -> float | None:
     return value * f if f else None
 
 
+def _utc(dt: datetime) -> datetime:
+    return dt.astimezone(UTC).replace(tzinfo=None) if dt.tzinfo else dt
+
+
+def _store_sleep(s: Session, smp: HKSample) -> bool:
+    stage = SLEEP_STAGES.get(int(smp.value))
+    if stage is None or smp.end is None:
+        return False
+    source = f"apple:{smp.source}"
+    exists = s.execute(
+        select(SleepSegment).where(
+            SleepSegment.source == source, SleepSegment.external_id == smp.uuid
+        )
+    ).scalar_one_or_none()
+    if exists:
+        return False
+    end_local = smp.end.astimezone(ZoneInfo(settings.timezone)) if smp.end.tzinfo else smp.end
+    # Nights belong to the wake-up day: anything ending after 18:00 is the start of the
+    # night that ends tomorrow morning (an afternoon nap stays on its own day).
+    wake_day = end_local.date() + timedelta(days=1 if end_local.hour >= 18 else 0)
+    s.add(
+        SleepSegment(
+            source=source,
+            external_id=smp.uuid,
+            date=wake_day,
+            start_ts=_utc(smp.start),
+            end_ts=_utc(smp.end),
+            stage=stage,
+        )
+    )
+    return True
+
+
 def ingest(s: Session, payload: HKPayload) -> dict[str, int]:
     stored = skipped = unknown = 0
     for smp in payload.samples:
+        if smp.type == SLEEP_TYPE:
+            if _store_sleep(s, smp):
+                stored += 1
+            else:
+                skipped += 1
+            continue
         mapping = TYPE_MAP.get(smp.type)
         if mapping is None:
             unknown += 1

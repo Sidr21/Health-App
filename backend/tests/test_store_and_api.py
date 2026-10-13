@@ -195,3 +195,50 @@ def test_day_bounds_utc_uses_local_day():
 
     lo, hi = day_bounds_utc(date(2026, 10, 13), "America/New_York")
     assert lo == datetime(2026, 10, 13, 4, 0) and hi == datetime(2026, 10, 14, 4, 0)
+
+
+def test_apple_sleep_stages_ingested_and_served():
+    from fastapi.testclient import TestClient
+
+    from health.api.main import app
+    from health.models import SleepSession
+
+    with dbmod.session_scope() as s:  # COROS main sleep, local wall-clock window
+        s.add(
+            SleepSession(
+                date=date(2026, 10, 13),
+                start_ts=datetime(2026, 10, 12, 23, 30),
+                end_ts=datetime(2026, 10, 13, 7, 0),
+                asleep_s=27000,
+            )
+        )
+
+    def seg(uid, start, end, value):
+        return {
+            "type": "HKCategoryTypeIdentifierSleepAnalysis",
+            "uuid": uid,
+            "start": start,
+            "end": end,
+            "value": value,
+            "unit": "",
+            "source": "com.example.watch",
+        }
+
+    samples = [
+        seg("a", "2026-10-13T03:30:00Z", "2026-10-13T03:40:00Z", 2),  # awake
+        seg("b", "2026-10-13T03:40:00Z", "2026-10-13T05:00:00Z", 3),  # core -> light
+        seg("c", "2026-10-13T05:00:00Z", "2026-10-13T06:00:00Z", 4),  # deep
+        seg("d", "2026-10-13T06:00:00Z", "2026-10-13T07:00:00Z", 5),  # rem
+        seg("e", "2026-10-13T03:30:00Z", "2026-10-13T11:00:00Z", 0),  # in bed (not served)
+        seg("f", "2026-10-13T18:00:00Z", "2026-10-13T18:30:00Z", 1),  # afternoon nap
+    ]
+    c = TestClient(app)
+    h = {"Authorization": "Bearer testtoken"}
+    r = c.post("/ingest/apple-health", json={"samples": samples}, headers=h).json()
+    assert r == {"stored": 6, "skipped": 0, "unknown_type": 0}
+    r = c.post("/ingest/apple-health", json={"samples": samples}, headers=h).json()
+    assert r["skipped"] == 6  # idempotent
+    day = c.get("/days", params={"start": "2026-10-13", "end": "2026-10-13"}, headers=h).json()
+    segs = day[0]["sleep"]["segments"]
+    assert [x["stage"] for x in segs] == ["awake", "light", "deep", "rem"]
+    assert segs[0]["start"] == "2026-10-13T03:30:00+00:00"

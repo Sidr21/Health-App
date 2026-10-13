@@ -28,6 +28,9 @@ export const HK_TYPES = [
 
 export type HKType = (typeof HK_TYPES)[number];
 
+/** Sleep stages (awake / core / deep / REM) for the hypnogram. COROS's API only has totals. */
+export const HK_SLEEP = "HKCategoryTypeIdentifierSleepAnalysis" as const;
+
 const anchorKey = (t: string) => `hk_anchor_${t.replace(/[^A-Za-z0-9]/g, "_")}`;
 
 type HK = typeof import("@kingstinct/react-native-healthkit");
@@ -50,13 +53,13 @@ export async function healthKitAvailable(): Promise<boolean> {
 export async function requestHealthKitAccess(): Promise<boolean> {
   const hk = await loadHK();
   if (!hk) return false;
-  return hk.requestAuthorization({ toRead: [...HK_TYPES] });
+  return hk.requestAuthorization({ toRead: [...HK_TYPES, HK_SLEEP] });
 }
 
 export async function enableBackgroundDelivery(): Promise<void> {
   const hk = await loadHK();
   if (!hk) return;
-  for (const t of HK_TYPES) {
+  for (const t of [...HK_TYPES, HK_SLEEP]) {
     try {
       await hk.enableBackgroundDelivery(t, hk.UpdateFrequency.hourly);
     } catch {
@@ -98,6 +101,25 @@ export async function syncHealthKit(): Promise<SyncResult> {
     if (res.newAnchor) await SecureStore.setItemAsync(anchorKey(t), res.newAnchor);
     result.types += 1;
   }
+  // sleep analysis is a category type: value = HKCategoryValueSleepAnalysis (0 in bed ... 5 REM)
+  const anchor = (await SecureStore.getItemAsync(anchorKey(HK_SLEEP))) ?? undefined;
+  const sleep = await hk.queryCategorySamplesWithAnchor(HK_SLEEP, { anchor, limit: 0 });
+  const out: HKSampleOut[] = sleep.samples.map((s) => ({
+    type: HK_SLEEP,
+    uuid: s.uuid,
+    start: new Date(s.startDate).toISOString(),
+    end: new Date(s.endDate).toISOString(),
+    value: Number(s.value),
+    unit: "",
+    source: s.sourceRevision?.source?.bundleIdentifier ?? "unknown",
+  }));
+  if (out.length) {
+    const r = await api.ingestAppleHealth(out);
+    result.stored += r.stored;
+    result.skipped += r.skipped;
+  }
+  if (sleep.newAnchor) await SecureStore.setItemAsync(anchorKey(HK_SLEEP), sleep.newAnchor);
+  result.types += 1;
   return result;
 }
 
@@ -105,7 +127,7 @@ export async function syncHealthKit(): Promise<SyncResult> {
 export async function watchHealthKit(onSynced?: (r: SyncResult) => void): Promise<() => void> {
   const hk = await loadHK();
   if (!hk) return () => {};
-  const subs = HK_TYPES.map((t) =>
+  const subs = [...HK_TYPES, HK_SLEEP].map((t) =>
     hk.subscribeToChanges(t, () => {
       syncHealthKit().then(onSynced).catch(() => {});
     }),

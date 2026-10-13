@@ -288,6 +288,7 @@ def store_fitness(s: Session, d: date, fit: dict) -> None:
 
     for metric, key in [
         ("vo2max", "vo2max"),
+        ("running_level", "running_level"),
         ("threshold_pace", "threshold_pace_s_per_km"),
         ("race_5k", "pred_5k_s"),
         ("race_10k", "pred_10k_s"),

@@ -65,13 +65,16 @@ def coros_call(tool: str, args: str = "{}") -> None:
 
 
 @coros.command("sync")
-def coros_sync(days: int = 30, laps: bool = True) -> None:
-    """Pull the last N days from COROS and store them, then recompute scores."""
+def coros_sync(days: int = 30, laps: bool = True, fit_limit: int = 10) -> None:
+    """Pull the last N days from COROS and store them, then recompute scores.
+
+    Downloads at most FIT_LIMIT new FIT files per run (COROS caps daily downloads); files
+    already stored are never downloaded again, so repeated runs finish the backfill."""
     from health.db import init_db, session_scope
     from health.sources.coros.sync import sync_all
 
     init_db()
-    counts = asyncio.run(sync_all(days, with_laps=laps))
+    counts = asyncio.run(sync_all(days, with_laps=laps, fit_limit=fit_limit))
     for k, v in counts.items():
         typer.echo(f"{k:32s} {v}")
     from health.compute import compute_range
@@ -79,6 +82,26 @@ def coros_sync(days: int = 30, laps: bool = True) -> None:
     with session_scope() as s:
         n = compute_range(s, date.today() - timedelta(days=days), date.today())
     typer.echo(f"recomputed {n} days")
+
+
+@app.command("fit")
+def fit_import(
+    path: Path, label_id: str = typer.Option(..., help="COROS labelId of the activity")
+) -> None:
+    """Store a FIT file's per-second samples for an activity already in the database."""
+    from sqlalchemy import select
+
+    from health.db import init_db, session_scope
+    from health.models import Activity
+    from health.sources.fit import store_fit
+
+    init_db()
+    with session_scope() as s:
+        a = s.execute(select(Activity).where(Activity.external_id == label_id)).scalar_one_or_none()
+        if a is None:
+            raise typer.BadParameter(f"no activity with labelId {label_id}; sync records first")
+        n = store_fit(s, a, path.read_bytes())
+    typer.echo(f"stored {n} samples for {label_id}")
 
 
 @coros.command("import")

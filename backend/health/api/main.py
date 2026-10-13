@@ -14,7 +14,14 @@ from sqlalchemy.orm import Session
 
 from health import __version__
 from health.api.auth import require_token
-from health.compute import strength_summary
+from health.compute import (
+    body_summary,
+    fitness_models,
+    hr_max_for,
+    journal_insights,
+    strength_summary,
+    workout_detail,
+)
 from health.config import settings
 from health.db import get_session, init_db
 from health.engine.muscles import MUSCLES, catalog, common_exercises
@@ -22,7 +29,9 @@ from health.models import (
     Activity,
     BodyMetric,
     Daily,
+    JournalEntry,
     Score,
+    SleepSegment,
     SleepSession,
     StrengthSet,
     StressSample,
@@ -71,6 +80,28 @@ def _day_payload(s: Session, d: date) -> dict:
         select(SleepSession).where(SleepSession.date == d, SleepSession.is_nap.is_(False))
     ).scalar_one_or_none()
     lo, hi = day_bounds_utc(d)
+    segments = []
+    if sleep is not None:
+        q = select(SleepSegment).where(SleepSegment.date == d).order_by(SleepSegment.start_ts)
+        if sleep.start_ts and sleep.end_ts:
+            # only the main night: drop naps and fragments outside its window. The COROS
+            # window is local wall-clock time; segments are UTC.
+            zone = ZoneInfo(settings.timezone)
+            w0 = sleep.start_ts.replace(tzinfo=zone).astimezone(UTC).replace(tzinfo=None)
+            w1 = sleep.end_ts.replace(tzinfo=zone).astimezone(UTC).replace(tzinfo=None)
+            q = q.where(
+                SleepSegment.end_ts > w0 - timedelta(hours=1),
+                SleepSegment.start_ts < w1 + timedelta(hours=1),
+            )
+        segments = [
+            {
+                "start": x.start_ts.replace(tzinfo=UTC).isoformat(),
+                "end": x.end_ts.replace(tzinfo=UTC).isoformat(),
+                "stage": x.stage,
+            }
+            for x in s.execute(q).scalars()
+            if x.stage != "inbed"
+        ]
     acts = s.execute(
         select(Activity)
         .where(Activity.start_ts >= lo, Activity.start_ts < hi)
@@ -114,6 +145,7 @@ def _day_payload(s: Session, d: date) -> dict:
                 "hr_avg": sleep.hr_avg,
                 "hr_min": sleep.hr_min,
                 "coros_score": sleep.coros_score,
+                "segments": segments,
             }
             if sleep
             else None
@@ -176,6 +208,14 @@ def activities(limit: int = 50, s: Session = Depends(get_session)) -> list[dict]
         }
         for a in rows
     ]
+
+
+@app.get("/activities/{activity_id}", dependencies=[Depends(require_token)])
+def activity_detail(activity_id: int, s: Session = Depends(get_session)) -> dict:
+    out = workout_detail(s, activity_id)
+    if out is None:
+        raise HTTPException(404, "no such activity")
+    return out
 
 
 @app.get("/body", dependencies=[Depends(require_token)])
@@ -306,3 +346,147 @@ def import_strength_csv(
         raise HTTPException(422, str(e)) from e
     replace_sessions(s, source, sets)
     return {"source": source, "sets": len(sets), "sessions": len({x.session_key for x in sets})}
+
+
+# ---------------------------------------------------------------- journal
+
+
+class JournalIn(BaseModel):
+    date: date
+    tag: str = Field(min_length=1, max_length=40, pattern=r"^[a-z0-9_]+$")
+    value: float | None = None  # 1/0 for yes/no tags, a number for amounts
+    note: str | None = Field(None, max_length=500)
+
+
+def _entry(r: JournalEntry) -> dict:
+    return {"date": r.date.isoformat(), "tag": r.tag, "value": r.value, "note": r.note}
+
+
+@app.get("/journal", dependencies=[Depends(require_token)])
+def journal_list(
+    start: date = Query(...), end: date = Query(...), s: Session = Depends(get_session)
+) -> list[dict]:
+    rows = s.execute(
+        select(JournalEntry)
+        .where(JournalEntry.date >= start, JournalEntry.date <= end)
+        .order_by(JournalEntry.date, JournalEntry.tag)
+    ).scalars()
+    return [_entry(r) for r in rows]
+
+
+@app.put("/journal", dependencies=[Depends(require_token)])
+def journal_put(body: JournalIn, s: Session = Depends(get_session)) -> dict:
+    row = s.execute(
+        select(JournalEntry).where(JournalEntry.date == body.date, JournalEntry.tag == body.tag)
+    ).scalar_one_or_none()
+    if row is None:
+        row = JournalEntry(date=body.date, tag=body.tag)
+        s.add(row)
+    row.value, row.note = body.value, body.note
+    s.flush()
+    return _entry(row)
+
+
+@app.delete("/journal/{day}/{tag}", dependencies=[Depends(require_token)])
+def journal_delete(day: date, tag: str, s: Session = Depends(get_session)) -> dict:
+    res = s.execute(delete(JournalEntry).where(JournalEntry.date == day, JournalEntry.tag == tag))
+    return {"deleted": res.rowcount}
+
+
+@app.get("/journal/insights", dependencies=[Depends(require_token)])
+def journal_insights_api(days: int = Query(90, ge=14, le=365), s: Session = Depends(get_session)):
+    return journal_insights(s, datetime.now(ZoneInfo(settings.timezone)).date(), days)
+
+
+# ---------------------------------------------------------------- body, settings, models
+
+
+def _today() -> date:
+    return datetime.now(ZoneInfo(settings.timezone)).date()
+
+
+@app.get("/body/summary", dependencies=[Depends(require_token)])
+def body_summary_api(days: int = Query(365, ge=7, le=3650), s: Session = Depends(get_session)):
+    return body_summary(s, _today(), days)
+
+
+@app.get("/fitness/models", dependencies=[Depends(require_token)])
+def fitness_models_api(s: Session = Depends(get_session)) -> dict:
+    return fitness_models(s, _today())
+
+
+class SettingsIn(BaseModel):
+    sex: Literal["male", "female"] | None = None
+    dob: date | None = None
+    height_cm: float | None = Field(None, ge=100, le=250)
+    hr_max: int | None = Field(None, ge=120, le=230)
+    hr_max_source: Literal["user", "field_test"] | None = None
+    clear_hr_max: bool = False  # go back to the estimate
+    units: Literal["imperial", "metric"] | None = None
+    sleep_need_min: int | None = Field(None, ge=300, le=660)
+
+
+def _settings_payload(s: Session) -> dict:
+    from health.models import User
+
+    u = s.execute(select(User)).scalars().first()
+    hm = hr_max_for(s, _today())
+    coros_last = s.execute(
+        select(func.max(SyncLog.ts)).where(SyncLog.source == "coros", SyncLog.ok.is_(True))
+    ).scalar_one()
+    apple_last = s.execute(
+        select(func.max(BodyMetric.ts)).where(BodyMetric.source.like("apple:%"))
+    ).scalar_one()
+    newest_activity = s.execute(select(func.max(Activity.start_ts))).scalar_one()
+    return {
+        "profile": {
+            "name": u.name if u else None,
+            "sex": u.sex if u else None,
+            "dob": u.dob.isoformat() if u and u.dob else None,
+            "height_cm": u.height_cm if u else None,
+        },
+        "hr_max": {
+            "set_value": u.hr_max if u else None,
+            "set_source": u.hr_max_source if u else None,
+            "effective": hm.value if hm else None,
+            "method": hm.method if hm else None,
+            "candidates": hm.candidates if hm else {},
+        },
+        "units": (u.units if u else None) or "imperial",
+        "sleep_need_min": (u.sleep_need_min if u else None) or 480,
+        "timezone": settings.timezone,
+        "sources": {
+            "coros_last_sync": coros_last.replace(tzinfo=UTC).isoformat() if coros_last else None,
+            "newest_activity": (
+                newest_activity.replace(tzinfo=UTC).isoformat() if newest_activity else None
+            ),
+            "apple_last_sample": (
+                apple_last.replace(tzinfo=UTC).isoformat() if apple_last else None
+            ),
+        },
+    }
+
+
+@app.get("/settings", dependencies=[Depends(require_token)])
+def get_settings(s: Session = Depends(get_session)) -> dict:
+    return _settings_payload(s)
+
+
+@app.put("/settings", dependencies=[Depends(require_token)])
+def put_settings(body: SettingsIn, s: Session = Depends(get_session)) -> dict:
+    from health.models import User
+
+    u = s.execute(select(User)).scalars().first()
+    if u is None:
+        u = User(name="me")
+        s.add(u)
+    for field in ("sex", "dob", "height_cm", "units", "sleep_need_min"):
+        v = getattr(body, field)
+        if v is not None:
+            setattr(u, field, v)
+    if body.clear_hr_max:
+        u.hr_max, u.hr_max_source = None, None
+    elif body.hr_max is not None:
+        u.hr_max, u.hr_max_source = body.hr_max, body.hr_max_source or "user"
+    s.flush()
+    return _settings_payload(s)

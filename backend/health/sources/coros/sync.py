@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
 
+import httpx
+from sqlalchemy import select
+
 from health.db import session_scope
+from health.models import Activity
 from health.sources.coros.mcp_client import CorosMcp
 from health.sources.coros.store import import_text, log
+from health.sources.fit import store_fit
 
 _SPORT_ALL = [65535]
 
@@ -15,7 +21,25 @@ def _yyyymmdd(d: date) -> str:
     return d.strftime("%Y%m%d")
 
 
-async def sync_all(days: int = 30, *, with_laps: bool = True) -> dict[str, int]:
+_FIT_URL = re.compile(r"https?://\S+?\.fit\b")
+
+
+async def _download_fit(c: CorosMcp, label_id: str, sport_type: int) -> bytes | None:
+    text = await c.call(
+        "queryActivityFitFileDownloadUrls", {"labelId": label_id, "sportType": sport_type}
+    )
+    m = _FIT_URL.search(text)
+    if not m:
+        return None
+    async with httpx.AsyncClient(timeout=60) as http:
+        r = await http.get(m.group(0))
+        r.raise_for_status()
+        return r.content
+
+
+async def sync_all(
+    days: int = 30, *, with_laps: bool = True, fit_limit: int = 10
+) -> dict[str, int]:
     today = date.today()
     start = today - timedelta(days=days)
     counts: dict[str, int] = {}
@@ -77,6 +101,16 @@ async def sync_all(days: int = 30, *, with_laps: bool = True) -> dict[str, int]:
                             {"labelId": r.label_id, "sportType": r.sport_type},
                         )
                         import_text(s, "queryActivityLapData", laps, label_id=r.label_id)
+                    act = s.execute(
+                        select(Activity).where(
+                            Activity.source == "coros", Activity.external_id == r.label_id
+                        )
+                    ).scalar_one_or_none()
+                    if act is not None and not act.fit_path and fit_limit > 0:
+                        data = await _download_fit(c, r.label_id, r.sport_type)
+                        if data:
+                            counts["fit"] = counts.get("fit", 0) + store_fit(s, act, data)
+                            fit_limit -= 1
                 except Exception as e:
                     log(s, f"activity:{r.label_id}", False, str(e)[:500])
     return counts

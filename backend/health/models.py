@@ -32,6 +32,7 @@ class User(Base):
     hr_max: Mapped[int | None] = mapped_column(Integer)
     hr_max_source: Mapped[str | None] = mapped_column(String(20))  # user|field_test|estimated
     units: Mapped[str] = mapped_column(String(10), default="imperial")
+    sleep_need_min: Mapped[int | None] = mapped_column(Integer, default=480)
     tz: Mapped[str] = mapped_column(String(40), default="America/New_York")
 
 
@@ -132,6 +133,20 @@ class SleepSession(Base):
     coros_score: Mapped[int | None] = mapped_column(Integer)
     is_nap: Mapped[bool] = mapped_column(default=False)
     raw_json: Mapped[dict | None] = mapped_column(JSON)
+
+
+class SleepSegment(Base):
+    """One stage interval of a night (from Apple Health sleep analysis). `date` = wake-up day."""
+
+    __tablename__ = "sleep_segments"
+    __table_args__ = (UniqueConstraint("source", "external_id", name="uq_sleep_segment"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source: Mapped[str] = mapped_column(String(60))
+    external_id: Mapped[str] = mapped_column(String(64))
+    date: Mapped[date] = mapped_column(Date, index=True)
+    start_ts: Mapped[datetime] = mapped_column(DateTime)  # UTC
+    end_ts: Mapped[datetime] = mapped_column(DateTime)
+    stage: Mapped[str] = mapped_column(String(10))  # awake|light|deep|rem|asleep|inbed
 
 
 class HrvSample(Base):

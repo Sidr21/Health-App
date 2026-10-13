@@ -27,6 +27,16 @@ from health.engine.muscles import (
 from health.engine.muscles import METHOD as MUSCLE_METHOD
 from health.engine.recovery import RecoveryInputs, recovery_score
 from health.engine.sleep import SleepInputs, sleep_score
+from health.engine.workout import (
+    HrMax,
+    cardio_focus,
+    downsample,
+    estimate_hr_max,
+    hr_recovery,
+    time_in_zones_laps,
+    time_in_zones_stream,
+    zones,
+)
 from health.models import Activity, Daily, HrvSample, Score, SleepSession, StrengthSet
 from health.sources.strength_store import is_strength
 
@@ -401,3 +411,309 @@ def store_muscular_score(s: Session, d: date) -> dict:
         },
     )
     return summary
+
+
+# ---------------------------------------------------------------- workouts
+
+
+def hr_max_for(s: Session, today: date | None = None) -> HrMax | None:
+    from health.models import User
+
+    today = today or date.today()
+    user = s.execute(select(User)).scalars().first()
+    since = datetime.combine(today - timedelta(days=365), datetime.min.time())
+    observed = [
+        h
+        for (h,) in s.execute(
+            select(Activity.max_hr).where(Activity.start_ts >= since, Activity.max_hr.is_not(None))
+        )
+    ]
+    return estimate_hr_max(
+        user.dob if user else None,
+        today,
+        observed,
+        set_value=user.hr_max if user else None,
+        set_source=user.hr_max_source if user else None,
+    )
+
+
+def workout_detail(s: Session, activity_id: int) -> dict | None:
+    """Everything the workout screen shows. Zones use the stream when the FIT file is stored,
+    else lap averages; each block says which it used."""
+    from health.engine.muscles import MUSCLES, exercise_muscles, sport_shares
+    from health.models import ActivityLap, ActivitySample
+
+    a = s.get(Activity, activity_id)
+    if a is None:
+        return None
+    detail = (a.raw_json or {}).get("detail", {})
+    laps = (
+        s.execute(
+            select(ActivityLap).where(ActivityLap.activity_id == a.id).order_by(ActivityLap.idx)
+        )
+        .scalars()
+        .all()
+    )
+    samples = (
+        s.execute(
+            select(ActivitySample)
+            .where(ActivitySample.activity_id == a.id)
+            .order_by(ActivitySample.t_offset_s)
+        )
+        .scalars()
+        .all()
+    )
+    hm = hr_max_for(s, _local_day(a.start_ts))
+
+    stream = [(x.t_offset_s, x.hr) for x in samples]
+    zone_block = None
+    hrr = None
+    if hm is not None:
+        if any(h for _, h in stream):
+            secs = time_in_zones_stream(stream, hm.value)
+            method = "stream"
+            hrr = hr_recovery(stream, hm.value)
+        else:
+            secs = time_in_zones_laps([(lap.duration_s, lap.avg_hr) for lap in laps], hm.value)
+            method = "laps"
+        if sum(secs) > 0:
+            zone_block = {
+                "method": method,
+                "zones": [
+                    {**z, "seconds": round(sec)}
+                    for z, sec in zip(zones(hm.value), secs, strict=True)
+                ],
+                "focus": cardio_focus(secs),
+            }
+
+    if is_strength(a):
+        sets = s.execute(select(StrengthSet).where(StrengthSet.activity_id == a.id)).scalars()
+        weights: dict[str, float] = {}
+        for r in sets:
+            for m, w in exercise_muscles(r.exercise).muscles.items():
+                weights[m] = weights.get(m, 0.0) + w
+        total = sum(weights.values()) or 1.0
+        shares = {m: w / total for m, w in weights.items()}
+    else:
+        shares, _ = sport_shares(a.sport)
+    muscles = [
+        {"id": m, "name": MUSCLES[m].name, "share": round(100 * v, 1)}
+        for m, v in sorted(shares.items(), key=lambda kv: -kv[1])
+        if v > 0
+    ]
+
+    rows = [
+        {
+            "t": x.t_offset_s,
+            "hr": x.hr,
+            "speed_mps": x.speed_mps,
+            "alt_m": x.alt_m,
+            "power_w": x.power_w,
+            "cadence": x.cadence,
+        }
+        for x in samples
+    ]
+    return {
+        "id": a.id,
+        "source": a.source,
+        "sport": a.sport,
+        "sport_code": a.sport_code,
+        "location": a.location,
+        "start": a.start_ts.replace(tzinfo=UTC).isoformat(),
+        "end": a.end_ts.replace(tzinfo=UTC).isoformat() if a.end_ts else None,
+        "stats": {
+            "active_s": detail.get("workout_time_s") or a.duration_s,
+            "total_s": detail.get("total_time_s")
+            or ((a.end_ts - a.start_ts).total_seconds() if a.end_ts else None),
+            "distance_m": a.distance_m,
+            "avg_pace_s_per_km": a.avg_pace_s_per_km,
+            "best_km_s": detail.get("best_km_s"),
+            "avg_hr": a.avg_hr,
+            "max_hr": a.max_hr,
+            "avg_power_w": a.avg_power_w,
+            "avg_cadence": detail.get("avg_cadence"),
+            "stride_m": detail.get("stride_m"),
+            "elev_gain_m": a.elev_gain_m,
+            "elev_loss_m": detail.get("elev_loss_m"),
+            "calories": a.calories,
+        },
+        "coros": {
+            "training_load": a.coros_training_load,
+            "aerobic_te": a.coros_aerobic_te,
+            "anaerobic_te": a.coros_anaerobic_te,
+            "training_focus": detail.get("training_focus"),
+            "performance": detail.get("performance"),
+        },
+        "hr_max": (
+            {"value": hm.value, "method": hm.method, "candidates": hm.candidates} if hm else None
+        ),
+        "zones": zone_block,
+        "hr_recovery": hrr,
+        "stream": {"n": len(rows), "points": downsample(rows, 300)},
+        "laps": [
+            {
+                "idx": lap.idx,
+                "duration_s": lap.duration_s,
+                "distance_m": lap.distance_m,
+                "avg_hr": lap.avg_hr,
+                "max_hr": lap.max_hr,
+                "avg_pace_s_per_km": lap.avg_pace_s_per_km,
+                "avg_power_w": lap.avg_power_w,
+                "avg_cadence": lap.avg_cadence,
+            }
+            for lap in laps
+        ],
+        "muscles": muscles,
+    }
+
+
+# ---------------------------------------------------------------- journal insights
+
+
+def journal_insights(s: Session, end: date, days: int = 90) -> dict:
+    from health.engine.insights import OUTCOMES, tag_effects
+    from health.models import JournalEntry
+
+    start = end - timedelta(days=days)
+    entries: dict[date, dict[str, float]] = {}
+    for r in s.execute(
+        select(JournalEntry).where(JournalEntry.date >= start, JournalEntry.date <= end)
+    ).scalars():
+        if r.value is not None:
+            entries.setdefault(r.date, {})[r.tag] = r.value
+    outcomes: dict[date, dict[str, float]] = {}
+    for r in s.execute(
+        select(Score).where(
+            Score.date > start,
+            Score.date <= end + timedelta(days=1),
+            Score.kind.in_(["recovery", "sleep"]),
+        )
+    ).scalars():
+        o = outcomes.setdefault(r.date, {})
+        o[r.kind] = r.value
+        if r.kind == "recovery" and r.components and r.components.get("hrv_ms"):
+            o["hrv_ms"] = r.components["hrv_ms"]
+    for r in s.execute(
+        select(Daily).where(Daily.date > start, Daily.date <= end + timedelta(days=1))
+    ).scalars():
+        if r.rhr:
+            outcomes.setdefault(r.date, {})["rhr"] = r.rhr
+    effects = tag_effects(entries, outcomes)
+    return {
+        "window": {"start": start.isoformat(), "end": end.isoformat(), "days": days},
+        "logged_days": len(entries),
+        "method": "next-morning mean, yes vs no (median split for numbers), Welch z; min 5 each",
+        "outcomes": {
+            k: {"label": v[0], "unit": v[1], "higher_is_better": v[2]} for k, v in OUTCOMES.items()
+        },
+        "effects": [e.__dict__ for e in effects],
+    }
+
+
+# ---------------------------------------------------------------- body, settings, fitness
+
+
+BODY_METRICS = {
+    # metric: (label, unit)
+    "weight_kg": ("Weight", "kg"),
+    "bmi": ("BMI", ""),
+    "body_fat_pct": ("Body fat", "%"),
+    "lean_mass_kg": ("Lean mass", "kg"),
+    "waist_cm": ("Waist", "cm"),
+}
+
+
+def body_summary(s: Session, end: date, days: int = 365) -> dict:
+    """Latest value, 30-day change and a one-point-per-day series for each body metric.
+    BMI comes from Apple Health when the scale writes it, else weight / height²."""
+    from health.models import BodyMetric, User
+
+    since = datetime.combine(end - timedelta(days=days), datetime.min.time())
+    rows = (
+        s.execute(select(BodyMetric).where(BodyMetric.ts >= since).order_by(BodyMetric.ts))
+        .scalars()
+        .all()
+    )
+    user = s.execute(select(User)).scalars().first()
+    heights = [r.value for r in rows if r.metric == "height_cm"]
+    height = heights[-1] if heights else (user.height_cm if user else None)
+
+    series: dict[str, dict[str, tuple[float, str]]] = {}
+    for r in rows:
+        day = _local_day(r.ts).isoformat()
+        series.setdefault(r.metric, {})[day] = (r.value, r.source)  # last reading of the day
+    bmi_method = "apple" if series.get("bmi") else None
+    if not series.get("bmi") and height and series.get("weight_kg"):
+        bmi_method = "weight/height^2"
+        m = (height / 100) ** 2
+        series["bmi"] = {
+            d: (round(w / m, 1), "computed") for d, (w, _) in series["weight_kg"].items()
+        }
+
+    out = {}
+    for metric, (label, unit) in BODY_METRICS.items():
+        pts = sorted(series.get(metric, {}).items())
+        if not pts:
+            out[metric] = {"label": label, "unit": unit, "latest": None, "series": []}
+            continue
+        last_day, (last_val, last_src) = pts[-1]
+        cutoff = (date.fromisoformat(last_day) - timedelta(days=30)).isoformat()
+        older = [v for d, (v, _) in pts if d <= cutoff]
+        out[metric] = {
+            "label": label,
+            "unit": unit,
+            "latest": {"date": last_day, "value": round(last_val, 2), "source": last_src},
+            "change_30d": round(last_val - older[-1], 2) if older else None,
+            "series": [{"date": d, "value": round(v, 2)} for d, (v, _) in pts],
+        }
+    out["bmi"]["method"] = bmi_method
+    return {"height_cm": height, "metrics": out}
+
+
+RACES = [
+    ("race_5k", "5K", 5000),
+    ("race_10k", "10K", 10000),
+    ("race_hm", "Half marathon", 21097.5),
+    ("race_m", "Marathon", 42195),
+]
+
+
+def fitness_models(s: Session, today: date) -> dict:
+    """Our model estimates next to COROS's. Ours need FIT streams (DESIGN §6.5–6.6), so until
+    those are synced each block says what it is waiting for."""
+    from health.models import ActivitySample, FitnessEstimate
+
+    latest: dict[tuple[str, str], FitnessEstimate] = {}
+    for r in s.execute(select(FitnessEstimate).order_by(FitnessEstimate.date)).scalars():
+        latest[(r.metric, r.method)] = r
+
+    def coros(metric: str) -> dict | None:
+        r = latest.get((metric, "coros"))
+        return {"value": r.value, "date": r.date.isoformat()} if r else None
+
+    runs = s.execute(select(Activity).where(Activity.sport.ilike("%run%"))).scalars().all()
+    with_stream = {a for (a,) in s.execute(select(ActivitySample.activity_id).distinct())}
+    n_stream = sum(1 for a in runs if a.id in with_stream)
+    hm = hr_max_for(s, today)
+    waiting = (
+        f"Needs heart-rate + pace streams from FIT files ({n_stream} of {len(runs)} runs "
+        "synced). Runs on the Mac sync."
+    )
+    return {
+        "hr_max": (
+            {"value": hm.value, "method": hm.method, "candidates": hm.candidates} if hm else None
+        ),
+        "vo2max": {"coros": coros("vo2max"), "ours": None, "status": waiting},
+        "running_level": coros("running_level"),
+        "threshold": {
+            "coros_pace_s_per_km": coros("threshold_pace"),
+            "ours_lthr": None,
+            "ours_pace_s_per_km": None,
+            "status": waiting,
+        },
+        "races": [
+            {"key": k, "label": label, "distance_m": dist, "coros_s": coros(k), "ours_s": None}
+            for k, label, dist in RACES
+        ],
+        "inputs": {"runs": len(runs), "runs_with_streams": n_stream},
+    }

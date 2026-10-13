@@ -511,7 +511,8 @@ def parse_recovery_status(text: str) -> dict[str, Any]:
 
 def parse_fitness_assessment(text: str) -> dict[str, Any]:
     def grab(label: str) -> str | None:
-        m = re.search(rf"{re.escape(label)}:\s*(.+)", text)
+        # anchored to the line start: "Marathon Prediction" must not match "Half Marathon ..."
+        m = re.search(rf"(?m)^\s*{re.escape(label)}:\s*(.+)", text)
         return m.group(1).strip() if m else None
 
     return {
@@ -561,6 +562,18 @@ def parse_activity_detail(text: str) -> dict[str, Any]:
             nums = re.findall(r"\d+", v)
             if nums:
                 out["elev_gain_m"] = float(nums[0])
+            if len(nums) > 1:
+                out["elev_loss_m"] = float(nums[1])
+        elif k == "Workout Time":
+            out["workout_time_s"] = parse_hms(v)
+        elif k == "Total Time":
+            out["total_time_s"] = parse_hms(v)
+        elif k == "Best Kilometer":
+            out["best_km_s"] = parse_pace(v)
+        elif k == "Moving Average Pace":
+            out["moving_pace_s_per_km"] = parse_pace(v)
+        elif k == "Average Stride Length":
+            out["stride_m"] = _float(v)
         elif k == "Training Focus":
             out["training_focus"] = v
         elif k == "Performance":

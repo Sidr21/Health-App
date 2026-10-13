@@ -91,10 +91,13 @@ def test_singletons(fixture_text):
     fit = p.parse_fitness_assessment(fixture_text("fitness.txt"))
     assert fit["vo2max"] == 56 and fit["threshold_pace_s_per_km"] == 283
     assert fit["pred_half_s"] == 1 * 3600 + 45 * 60 + 23
+    assert fit["pred_marathon_s"] == 3 * 3600 + 42 * 60 + 13  # not the half's line
     user = p.parse_user_info(fixture_text("user_info.txt"))
     assert user["height_cm"] == 175.0 and user["dob"] == date(2000, 1, 15) and user["sex"] == "male"
     det = p.parse_activity_detail(fixture_text("activity_detail.txt"))
     assert det["training_load"] == 86 and det["aerobic_te"] == 2.7 and det["elev_gain_m"] == 15
+    assert det["elev_loss_m"] == 24 and det["total_time_s"] == 41 * 60 + 45
+    assert det["workout_time_s"] == 37 * 60 + 18 and det["stride_m"] == 1.09
 
 
 def test_lap_data():

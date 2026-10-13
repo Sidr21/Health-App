@@ -32,7 +32,30 @@ def get_engine():
 
 
 def init_db() -> None:
-    Base.metadata.create_all(get_engine())
+    engine = get_engine()
+    Base.metadata.create_all(engine)
+    add_missing_columns(engine)
+
+
+def add_missing_columns(engine) -> list[str]:
+    """Tiny forward-only migration: add columns that exist in the models but not in the
+    database (create_all never alters existing tables). New columns must be nullable."""
+    from sqlalchemy import inspect, text
+
+    added = []
+    insp = inspect(engine)
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if not insp.has_table(table.name):
+                continue
+            have = {c["name"] for c in insp.get_columns(table.name)}
+            for col in table.columns:
+                if col.name in have:
+                    continue
+                ddl = col.type.compile(dialect=engine.dialect)
+                conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {ddl}'))
+                added.append(f"{table.name}.{col.name}")
+    return added
 
 
 @contextmanager
