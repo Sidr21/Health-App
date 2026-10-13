@@ -16,7 +16,7 @@ Status: **design draft v3** (2026-10-13). Decided: React Native client, cloud-ho
 2. Ingest COROS activities at full resolution (FIT files) and daily wellness data (sleep, nightly HRV, RHR, stress, training load).
 3. Ingest Apple Health for things COROS does not have: body weight, BMI, body-fat %, lean mass, blood pressure, nutrition, mindfulness, and anything a future device adds.
 4. Compute our own **VO2max**, **lactate-threshold heart rate (LTHR)**, **threshold / critical pace**, **race predictions**, and a transparent **biological (fitness) age**, each shown next to COROS's value with a confidence range and an explanation of inputs.
-5. Bevel-like mobile UI: four score rings on a Today screen, drill-down screens per score, a Trends tab, a Workouts tab, a Journal with correlations.
+5. Bevel-like mobile UI: score rings on a Home screen, drill-down sheets per score, a Fitness tab with workout detail and load gauges, a Biology tab with trends and biological age, a Journal with correlations.
 
 **Non-goals (for v1)**
 
