@@ -24,6 +24,7 @@ export interface DayPayload {
     coros_stl: number | null;
     coros_ltl: number | null;
     coros_load_ratio: number | null;
+    coros_load_comment: string | null;
   };
   sleep: {
     start: string | null;

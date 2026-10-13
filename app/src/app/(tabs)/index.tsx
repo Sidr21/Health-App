@@ -1,65 +1,101 @@
 import { useQuery } from "@tanstack/react-query";
+import { router } from "expo-router";
 import React from "react";
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Card } from "@/components/Card";
-import { MetricRow } from "@/components/MetricRow";
+import { Chip } from "@/components/Chip";
+import { Avatar, Header } from "@/components/Header";
+import { CloudIcon, MoonIcon, PulseIcon, HeartIcon, RunnerIcon, SunIcon } from "@/components/icons";
+import { InsightCard } from "@/components/InsightCard";
+import { MetricCard, type Tone } from "@/components/MetricCard";
 import { Ring } from "@/components/Ring";
-import { api, isoDate, type DayPayload } from "@/lib/api";
-import { dayLabel, hms, km, pct } from "@/lib/format";
+import { Screen } from "@/components/Screen";
+import { WorkoutCard } from "@/components/WorkoutCard";
+import { hms, pct } from "@/lib/format";
+import { insightFor } from "@/lib/insight";
+import { useDays } from "@/lib/useDays";
+import { DEFAULT_LOCATION, fetchWeather } from "@/lib/weather";
 import { bandColor, colors, font, spacing } from "@/theme/tokens";
 
-function lastNDays(n: number): [string, string] {
-  const end = new Date();
-  const start = new Date(end);
-  start.setDate(end.getDate() - (n - 1));
-  return [isoDate(start), isoDate(end)];
+interface RecoveryComps {
+  band?: "green" | "amber" | "red";
+  hrv_ms?: number;
+  hrv_base_ms?: number;
+  rhr?: number;
+  rhr_base?: number;
+  calibrating?: boolean;
 }
 
 function statusFor(value: number | null, base: number | null, lowerIsBetter: boolean) {
   if (value == null || base == null) return null;
   const rel = (value - base) / base;
-  if (Math.abs(rel) < 0.05) return { label: "Normal", tone: "neutral" as const };
-  const better = lowerIsBetter ? rel < 0 : rel > 0;
-  return { label: better ? (lowerIsBetter ? "Below normal" : "Above normal") : lowerIsBetter ? "Above normal" : "Below normal", tone: better ? ("good" as const) : ("bad" as const) };
+  if (Math.abs(rel) < 0.08) return { label: "Normal", tone: "neutral" as Tone };
+  const up = rel > 0;
+  const better = lowerIsBetter ? !up : up;
+  return { label: up ? "Above normal" : "Below normal", tone: (better ? "good" : "bad") as Tone, direction: up ? ("up" as const) : ("down" as const) };
+}
+
+function headerDate(iso: string | undefined): string {
+  if (!iso) return "Today";
+  const d = new Date(`${iso}T00:00:00`);
+  return `Today, ${d.toLocaleDateString(undefined, { month: "long", day: "numeric" })}`;
 }
 
 export default function HomeScreen() {
-  const insets = useSafeAreaInsets();
-  const [start, end] = lastNDays(14);
-  const q = useQuery({ queryKey: ["days", start, end], queryFn: () => api.days(start, end) });
-  const days: DayPayload[] = q.data ?? [];
-  const today = days[days.length - 1];
+  const q = useDays(14);
+  const today = q.days[q.days.length - 1];
+  const weather = useQuery({ queryKey: ["weather"], queryFn: () => fetchWeather(), staleTime: 30 * 60_000 });
   const rec = today?.scores.recovery;
   const sleep = today?.scores.sleep;
-  const comps = (rec?.components ?? {}) as { band?: "green" | "amber" | "red"; hrv_ms?: number; hrv_base_ms?: number; rhr?: number; rhr_base?: number; calibrating?: boolean };
-  const hrvSeries = days.map((d) => ((d.scores.recovery?.components as { hrv_ms?: number } | null)?.hrv_ms ?? null));
-  const rhrSeries = days.map((d) => d.daily.rhr);
+  const comps = (rec?.components ?? {}) as RecoveryComps;
+  const hrvSeries = q.days.map((d) => ((d.scores.recovery?.components as { hrv_ms?: number } | null)?.hrv_ms ?? null));
+  const rhrSeries = q.days.map((d) => d.daily.rhr);
+  const sleepSeries = q.days.map((d) => (d.sleep?.asleep_s != null ? d.sleep.asleep_s / 3600 : null));
+  const insight = insightFor(today);
+  const WeatherIcon = weather.data && weather.data.code >= 3 ? CloudIcon : SunIcon;
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: spacing.xxl }}
-      refreshControl={<RefreshControl refreshing={q.isFetching} onRefresh={() => q.refetch()} tintColor={colors.textMuted} />}
-    >
-      <View style={styles.header}>
-        <Text style={styles.title}>{today ? dayLabel(today.date) : "Today"}</Text>
-        {comps.calibrating ? <Text style={styles.calib}>calibrating</Text> : null}
+    <Screen refreshing={q.isFetching} onRefresh={() => q.refetch()}>
+      <Header
+        title={headerDate(today?.date)}
+        dropdown
+        right={
+          <Pressable onPress={() => router.push("/settings")}>
+            <Avatar initials="SR" />
+          </Pressable>
+        }
+      />
+      <View style={styles.chips}>
+        <Chip icon={<RunnerIcon size={16} color={colors.text} />} title="Active" subtitle="Until changed" dropdown />
+        <Chip
+          icon={<WeatherIcon size={16} color={colors.text} />}
+          title={weather.data ? `${Math.round(weather.data.tempF)}°F` : "–°"}
+          subtitle={DEFAULT_LOCATION.name}
+        />
       </View>
 
-      <Card>
+      <Card style={styles.ringCard}>
         <View style={styles.rings}>
-          <Ring label="Strain" progress={null} value="–" color={colors.strain} />
-          <Ring label="Recovery" progress={rec ? rec.value / 100 : null} value={rec ? pct(rec.value) : "–"} color={bandColor(comps.band)} />
-          <Ring label="Sleep" progress={sleep ? sleep.value / 100 : null} value={sleep ? pct(sleep.value) : "–"} color={colors.sleep} />
+          <Ring label="Strain" progress={null} value="–%" color={colors.strain} />
+          <View style={styles.divider} />
+          <Ring label="Recovery" progress={rec ? rec.value / 100 : null} value={rec ? pct(rec.value) : "–%"} color={bandColor(comps.band)} />
+          <View style={styles.divider} />
+          <Ring label="Sleep" progress={sleep ? sleep.value / 100 : null} value={sleep ? pct(sleep.value) : "–%"} color={colors.sleep} />
         </View>
+        {comps.calibrating ? <Text style={styles.calib}>Calibrating · baselines need 14 nights</Text> : null}
         {!today && !q.isLoading ? (
-          <Text style={styles.empty}>{q.isError ? `Cannot reach the backend (${String(q.error)})` : "Nothing to see yet. Run `health coros sync` on the backend."}</Text>
+          <View style={styles.emptyWrap}>
+            <Text style={styles.emptyTitle}>Nothing to see yet!</Text>
+            <Text style={styles.empty}>{q.isError ? `Cannot reach the backend (${String(q.error)})` : "Sync your COROS data to get insights about your Recovery state."}</Text>
+          </View>
         ) : null}
       </Card>
 
-      <MetricRow
+      {insight ? <InsightCard insight={insight} /> : null}
+
+      <MetricCard
+        icon={PulseIcon}
         title="Resting HRV"
         value={comps.hrv_ms != null ? comps.hrv_ms.toFixed(0) : "–"}
         unit="ms"
@@ -68,7 +104,8 @@ export default function HomeScreen() {
         band={comps.hrv_base_ms ? { low: comps.hrv_base_ms * 0.85, high: comps.hrv_base_ms * 1.15 } : null}
         color={colors.recovery}
       />
-      <MetricRow
+      <MetricCard
+        icon={HeartIcon}
         title="Resting HR"
         value={today?.daily.rhr != null ? String(today.daily.rhr) : "–"}
         unit="bpm"
@@ -77,40 +114,34 @@ export default function HomeScreen() {
         band={comps.rhr_base ? { low: comps.rhr_base - 3, high: comps.rhr_base + 3 } : null}
         color={colors.cardio}
       />
-      <MetricRow
-        title="Sleep"
+      <MetricCard
+        icon={MoonIcon}
+        title="Time asleep"
         value={hms(today?.sleep?.asleep_s)}
-        status={today?.sleep?.coros_score != null ? { label: `COROS score ${today.sleep.coros_score}`, tone: "neutral" } : null}
-        series={days.map((d) => (d.sleep?.asleep_s != null ? d.sleep.asleep_s / 3600 : null))}
+        status={today?.sleep?.asleep_s != null ? { label: today.sleep.asleep_s >= 7 * 3600 ? "On target" : "Short night", tone: today.sleep.asleep_s >= 7 * 3600 ? "good" : "bad" } : null}
+        series={sleepSeries}
+        band={{ low: 7, high: 9 }}
         color={colors.sleep}
       />
 
-      <Card title="Today's workouts">
-        {today?.activities.length ? (
-          today.activities.map((a) => (
-            <View key={a.id} style={styles.activity}>
-              <Text style={styles.activityName}>{a.sport}</Text>
-              <Text style={styles.activityMeta}>
-                {hms(a.duration_s)} · {km(a.distance_m)} · {a.avg_hr ?? "–"} bpm · {a.calories ?? "–"} kcal
-              </Text>
-            </View>
-          ))
-        ) : (
-          <Text style={styles.empty}>No workouts today</Text>
-        )}
-      </Card>
-    </ScrollView>
+      <Text style={styles.section}>Today&apos;s workouts</Text>
+      {today?.activities.length ? today.activities.map((a) => <WorkoutCard key={a.id} a={a} />) : (
+        <Card>
+          <Text style={styles.empty}>No workouts recorded today</Text>
+        </Card>
+      )}
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg, paddingHorizontal: spacing.lg },
-  header: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginBottom: spacing.lg },
-  title: { ...font.title, color: colors.text },
-  calib: { ...font.label, color: colors.recoveryAmber },
-  rings: { flexDirection: "row", justifyContent: "space-around" },
-  empty: { ...font.body, color: colors.textMuted, marginTop: spacing.md, textAlign: "center" },
-  activity: { paddingVertical: spacing.sm },
-  activityName: { ...font.heading, color: colors.text },
-  activityMeta: { ...font.label, color: colors.textMuted, marginTop: 2 },
+  chips: { flexDirection: "row", gap: 8, marginBottom: spacing.lg, marginTop: -4 },
+  ringCard: { paddingVertical: 22 },
+  rings: { flexDirection: "row", justifyContent: "space-around", alignItems: "center" },
+  divider: { width: StyleSheet.hairlineWidth, height: 70, backgroundColor: colors.hairline },
+  calib: { ...font.caption, color: colors.recoveryAmber, textAlign: "center", marginTop: spacing.md },
+  emptyWrap: { alignItems: "center", marginTop: spacing.lg },
+  emptyTitle: { ...font.heading, color: colors.text },
+  empty: { ...font.body, color: colors.textMuted, textAlign: "center", marginTop: 4 },
+  section: { ...font.heading, color: colors.text, marginTop: spacing.sm, marginBottom: spacing.md },
 });

@@ -1,12 +1,14 @@
-/** Dark-first design tokens matching the Bevel reference screens (docs/reference/bevel). */
+/** Dark design tokens matching Bevel's in-app screens (docs/reference/bevel/09–16). */
 export const colors = {
-  bg: "#0B0B0E",
-  card: "#1C1D22",
-  cardRaised: "#26272E",
-  border: "#2E2F37",
-  text: "#F5F5F7",
-  textMuted: "#9A9BA3",
-  textFaint: "#5F6068",
+  bg: "#121316",
+  card: "#1E1F24",
+  cardRaised: "#2A2B31",
+  pill: "#25262C",
+  border: "#2F3037",
+  hairline: "#34353C",
+  text: "#F4F4F6",
+  textMuted: "#9C9DA6",
+  textFaint: "#62636C",
   // category accents
   recovery: "#4CD964",
   recoveryAmber: "#F5B400",
@@ -20,19 +22,24 @@ export const colors = {
   energy: "#36D1C4",
   cardio: "#4C8DFF",
   muscular: "#38C6FF",
-  ring: "#2E2F37",
+  ring: "#2C2D33",
+  run: "#3DD6A4",
+  bike: "#8B7CFF",
+  hike: "#7FD35E",
+  gold: "#D4A72C",
 } as const;
 
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;
-export const radius = { sm: 10, md: 16, lg: 22, pill: 999 } as const;
+export const radius = { sm: 12, md: 18, lg: 26, pill: 999 } as const;
 
 export const font = {
-  display: { fontSize: 34, fontWeight: "700" as const, letterSpacing: -0.5 },
-  title: { fontSize: 22, fontWeight: "700" as const },
+  display: { fontSize: 34, fontWeight: "700" as const, letterSpacing: -0.6 },
+  title: { fontSize: 26, fontWeight: "700" as const, letterSpacing: -0.4 },
   heading: { fontSize: 17, fontWeight: "600" as const },
   body: { fontSize: 15, fontWeight: "400" as const },
   label: { fontSize: 13, fontWeight: "500" as const },
-  number: { fontSize: 28, fontWeight: "700" as const, fontVariant: ["tabular-nums"] as ("tabular-nums")[] },
+  caption: { fontSize: 12, fontWeight: "500" as const },
+  number: { fontSize: 30, fontWeight: "700" as const, fontVariant: ["tabular-nums"] as ("tabular-nums")[] },
 } as const;
 
 export function bandColor(band: "green" | "amber" | "red" | null | undefined): string {

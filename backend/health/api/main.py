@@ -58,6 +58,7 @@ def _day_payload(s: Session, d: date) -> dict:
             "coros_stl": daily.coros_stl if daily else None,
             "coros_ltl": daily.coros_ltl if daily else None,
             "coros_load_ratio": daily.coros_load_ratio if daily else None,
+            "coros_load_comment": daily.coros_load_comment if daily else None,
         },
         "sleep": (
             {
