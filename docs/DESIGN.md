@@ -78,11 +78,19 @@ Verified today against the connected **COROS PACE 4** account (user sidr21, 23 y
 
 COROS's self-service exports do **not** include daily data (sleep, HRV, RHR), so one of the two above is mandatory. Either way, every raw response and FIT file is stored on disk so re-computation never needs the network.
 
-### 3.2 Apple Health
+### 3.2 Smart scale → COROS
+
+The smart scale writes to COROS, not Apple Health, so weight lives on the COROS side. The MCP profile endpoint only returns the *current* weight (67.4 kg today), not a history. Plan:
+
+- Record the profile weight on every sync into `body_metrics` (one row per change) so a history accumulates from day one.
+- Check during phase 1 whether the Training Hub API exposes the scale's full history (weight, body-fat %, BMI); if it does, backfill from there.
+- Keep Apple Health as a second body-metrics source only if something else writes there.
+
+### 3.3 Apple Health
 
 COROS already writes steps, heart rate, sleep analysis and distances into Apple Health. We treat COROS as the source of truth for those and use Apple Health for:
 
-- Body mass, BMI, body-fat %, lean body mass, height, waist (manual or smart-scale)
+- Body-fat %, lean body mass, height, waist, and weight only if a non-COROS source writes it
 - Blood pressure, blood oxygen (if measured by something else), respiratory rate
 - Apple's own VO2max estimate (if an Apple Watch is ever worn), for comparison
 - Dietary energy / macros, water, caffeine, mindful minutes
@@ -93,7 +101,7 @@ Two ways in, pick by client choice (section 4.1):
 - **Native iOS app** → HealthKit directly, background delivery.
 - **PWA** → the *Health Auto Export* app's REST automation posts JSON to our `/ingest/apple-health` endpoint on a schedule. Well-trodden pattern for personal dashboards; no App Store needed.
 
-### 3.3 Manual / journal
+### 3.4 Manual / journal
 
 Journal tags and notes, race results (used to validate VO2max), HRmax tests, sickness/travel flags.
 
@@ -260,6 +268,7 @@ Blend as in 6.5; keep a time series. Threshold pace = CS from the speed-duration
 ### 6.7 HRmax
 
 - User-entered if known from a test.
+- Field test: the "Max HR Field Test" workout in the COROS library, protocol and extraction in `docs/engine/hrmax-test.md`.
 - Else: 95th percentile of the top-3 per-activity max HR over 12 months from runs with a hard finish (HR still rising in the last 2 min), minus artefact filtering (drop samples that jump > 10 bpm/s or sit > 10 bpm above the next highest plateau). Show "estimated" badge.
 
 ### 6.8 Biological (fitness) age
@@ -354,10 +363,10 @@ Suggested first session after this doc is approved: phase 0 + the MCP-client spi
 ## 10. Open items (need your input)
 
 1. **Client**: PWA first (recommended) or native SwiftUI from the start?
-2. **HRmax**: do you know yours from a test? Any recent race results (date, distance, time) to validate VO2max against?
+2. **HRmax**: field test is now in your COROS workout library (`docs/engine/hrmax-test.md`); tell me a date to schedule it. Any recent race results (date, distance, time) to validate VO2max against?
 3. **COROS → Apple Health sync**: is it enabled on your phone today, and do you have any other HealthKit writers (scale, Apple Watch)?
 4. **Hosting**: run on a home machine (Docker) or a small cloud box?
-5. **Bevel screenshots**: drop them into `docs/reference/bevel/` (Today, a score detail, Trends, Workout detail, Biological Age) and I will refine the wireframes in section 7 to match them one-for-one.
+5. **Bevel screenshots**: this cloud environment's network policy blocks `bevel.health`, `help.bevel.health`, `apps.apple.com` and Apple's image CDN `*.mzstatic.com`, so I cannot pull them. Either allow those domains in the environment settings and I will fetch them, or drop screenshots into `docs/reference/bevel/` (Today, a score detail, Trends, Workout detail, Biological Age). Then I will refine the wireframes in section 7 to match them one-for-one.
 6. **Units**: km and kg assumed.
 
 ---
