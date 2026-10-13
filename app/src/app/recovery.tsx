@@ -6,6 +6,7 @@ import { DetailHeader } from "@/components/DetailHeader";
 import { Aurora } from "@/components/Aurora";
 import { Surface } from "@/components/Surface";
 import { HeartIcon, LeafIcon, PulseIcon } from "@/components/icons";
+import { SectionLabel } from "@/components/SectionLabel";
 import { MetricCard } from "@/components/MetricCard";
 import { Dial } from "@/components/Dial";
 import { Panel } from "@/components/Tiles";
@@ -46,12 +47,12 @@ export default function RecoveryScreen() {
         <View style={styles.body}>
           <View style={styles.row}>
             <Surface style={styles.tile}>
-              <View style={styles.tileHead}><PulseIcon size={13} color={colors.textMuted} /><Text style={styles.label}>Resting HRV</Text></View>
+              <View style={styles.tileHead}><PulseIcon size={13} color={colors.textMuted} /><Text style={styles.over}>Resting HRV</Text></View>
               <Text style={styles.big}>{comps.hrv_ms != null ? comps.hrv_ms.toFixed(0) : "–"} <Text style={styles.label}>ms</Text></Text>
               <Text style={[styles.delta, { color: (comps.hrv_ms ?? 0) >= (comps.hrv_base_ms ?? 0) ? colors.recovery : colors.cardio }]}>{comps.hrv_base_ms != null ? `usual ${comps.hrv_base_ms.toFixed(0)} ms` : ""}</Text>
             </Surface>
             <Surface style={styles.tile}>
-              <View style={styles.tileHead}><HeartIcon size={13} color={colors.textMuted} /><Text style={styles.label}>Resting HR</Text></View>
+              <View style={styles.tileHead}><HeartIcon size={13} color={colors.textMuted} /><Text style={styles.over}>Resting HR</Text></View>
               <Text style={styles.big}>{comps.rhr ?? "–"} <Text style={styles.label}>bpm</Text></Text>
               <Text style={[styles.delta, { color: (comps.rhr ?? 0) <= (comps.rhr_base ?? 0) ? colors.recovery : colors.strain }]}>{comps.rhr_base != null ? `usual ${comps.rhr_base.toFixed(0)} bpm` : ""}</Text>
             </Surface>
@@ -62,7 +63,7 @@ export default function RecoveryScreen() {
               <Text style={styles.insightBody}>{insight.body}</Text>
             </Panel>
           ) : null}
-          {comps.z ? <Text style={styles.section}>How this was computed</Text> : null}
+          {comps.z ? <SectionLabel title="How this was computed" /> : null}
           {comps.z ? <Panel>
             {Object.entries(comps.z ?? {}).map(([k, v]) => (
               <View key={k} style={styles.zRow}>
@@ -71,7 +72,7 @@ export default function RecoveryScreen() {
               </View>
             ))}
           </Panel> : null}
-          <Text style={styles.section}>Trends</Text>
+          <SectionLabel title="Trends" note="last 28 days" />
           <MetricCard icon={LeafIcon} title="Recovery" value={rec ? String(Math.round(rec.value)) : "–"} unit="%" series={q.days.map((d) => d.scores.recovery?.value ?? null)} band={{ low: 34, high: 67 }} color={colors.recovery} />
           <MetricCard icon={PulseIcon} title="Resting HRV" value={comps.hrv_ms != null ? comps.hrv_ms.toFixed(0) : "–"} unit="ms" series={hrvSeries} band={comps.hrv_base_ms ? { low: comps.hrv_base_ms * 0.85, high: comps.hrv_base_ms * 1.15 } : null} color={colors.recovery} />
           <MetricCard icon={HeartIcon} title="Resting HR" value={comps.rhr != null ? String(comps.rhr) : "–"} unit="bpm" series={q.days.map((d) => d.daily.rhr)} band={comps.rhr_base ? { low: comps.rhr_base - 3, high: comps.rhr_base + 3 } : null} color={colors.cardio} />
@@ -89,11 +90,11 @@ const styles = StyleSheet.create({
   tile: { flex: 1 },
   tileHead: { flexDirection: "row", alignItems: "center", gap: 6 },
   label: { ...font.label, color: colors.textMuted },
+  over: { ...font.overline, fontSize: 11, color: colors.textMuted },
   big: { ...font.number, fontSize: 26, color: colors.text, marginTop: 6 },
   delta: { ...font.caption, marginTop: 2 },
   insightTitle: { ...font.heading, fontSize: 15, color: colors.text },
   insightBody: { ...font.body, color: colors.textMuted, lineHeight: 21, marginTop: 6 },
-  section: { ...font.heading, fontSize: 17, color: colors.text, marginTop: spacing.sm, marginBottom: spacing.md },
   zRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 6 },
   zVal: { ...font.label, fontVariant: ["tabular-nums"] },
 });
