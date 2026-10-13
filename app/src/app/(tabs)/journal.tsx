@@ -4,10 +4,11 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Header, RoundButton } from "@/components/Header";
 import { ArrowRight, CheckCircle, DotsIcon, SparkleIcon } from "@/components/icons";
 import { Screen } from "@/components/Screen";
+import { Surface } from "@/components/Surface";
 import { WeekStrip, type WeekDay } from "@/components/WeekStrip";
 import { dayOfMonth, monthLabel, weekOf } from "@/lib/dates";
 import { todayIso } from "@/lib/useDays";
-import { colors, font, radius, spacing } from "@/theme/tokens";
+import { colors, font, spacing } from "@/theme/tokens";
 
 type Tri = "no" | "skip" | "yes" | null;
 
@@ -50,7 +51,7 @@ function TriToggle({ value, onChange }: { value: Tri; onChange: (v: Tri) => void
 
 function EntryRow({ e, value, onChange }: { e: Entry; value: Tri | number | null; onChange: (v: Tri) => void }) {
   return (
-    <View style={styles.entry}>
+    <Surface style={styles.entry}>
       <Text style={styles.emoji}>{e.emoji}</Text>
       <Text style={styles.entryLabel}>{e.label}</Text>
       {e.kind === "tri" ? (
@@ -61,7 +62,7 @@ function EntryRow({ e, value, onChange }: { e: Entry; value: Tri | number | null
           <View style={styles.arrowBtn}><ArrowRight size={16} color={colors.textMuted} /></View>
         </View>
       )}
-    </View>
+    </Surface>
   );
 }
 
@@ -127,10 +128,10 @@ const styles = StyleSheet.create({
   section: { ...font.heading, fontSize: 20, color: colors.text, marginTop: spacing.xl },
   sectionSub: { ...font.body, color: colors.textMuted, marginTop: 4, marginBottom: spacing.lg, lineHeight: 21 },
   group: { ...font.heading, color: colors.textMuted, marginBottom: spacing.sm, marginTop: spacing.sm },
-  entry: { flexDirection: "row", alignItems: "center", backgroundColor: colors.card, borderRadius: radius.lg, paddingVertical: 14, paddingHorizontal: spacing.lg, marginBottom: spacing.sm, gap: 10 },
+  entry: { flexDirection: "row", alignItems: "center", paddingVertical: 12, marginBottom: spacing.sm, gap: 10 },
   emoji: { fontSize: 20 },
   entryLabel: { ...font.heading, color: colors.text, flex: 1 },
-  tri: { flexDirection: "row", backgroundColor: colors.bg, borderRadius: 12, padding: 2, borderWidth: 1, borderColor: colors.hairline },
+  tri: { flexDirection: "row", backgroundColor: "rgba(0,0,0,0.35)", borderRadius: 12, padding: 2, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
   triBtn: { width: 40, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 10 },
   triActive: { backgroundColor: colors.cardRaised },
   triText: { ...font.heading, color: colors.textFaint },

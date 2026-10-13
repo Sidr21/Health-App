@@ -1,9 +1,11 @@
-import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import React from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { Backdrop } from "@/components/Backdrop";
 import { DetailHeader } from "@/components/DetailHeader";
+import { SkyHero } from "@/components/SkyHero";
+import { Surface } from "@/components/Surface";
 import { ArrowRight, BedIcon, ClockIcon, MoonIcon, SparkleIcon } from "@/components/icons";
 import { MetricCard } from "@/components/MetricCard";
 import { Ring } from "@/components/Ring";
@@ -53,32 +55,34 @@ export default function SleepScreen() {
 
   return (
     <View style={styles.screen}>
+      <Backdrop glow="sleep" bg={colors.sleepBg} height={700} />
       <ScrollView contentContainerStyle={{ paddingBottom: spacing.xxl }}>
-        <LinearGradient colors={["#2A2F5E", "#161A3A", colors.sleepBg]} locations={[0, 0.55, 1]} style={styles.hero}>
+        <View style={styles.hero}>
+          <SkyHero variant="night" />
           <DetailHeader title="Sleep" subtitle={`Today, ${title}`} dropdown />
           <View style={styles.heroRing}>
-            <Ring progress={score != null ? score / 100 : null} value={score != null ? `${Math.round(score)}%` : "–%"} caption="Quality" color={colors.sleep} size={170} stroke={14} trackColor="rgba(255,255,255,0.08)" />
+            <Ring progress={score != null ? score / 100 : null} value={score != null ? `${Math.round(score)}%` : "–%"} caption="Quality" color="#8F9BFF" size={170} stroke={14} trackColor="rgba(10,12,40,0.55)" halo />
           </View>
-        </LinearGradient>
+        </View>
 
         <View style={styles.body}>
           <View style={styles.row}>
-            <StatTile icon={BedIcon} label="Time in Bed" value={hms(s?.in_bed_s)} bg={colors.sleepCard} />
-            <StatTile icon={ClockIcon} label="Time Asleep" value={hms(s?.asleep_s)} bg={colors.sleepCard} />
+            <StatTile icon={BedIcon} label="Time in Bed" value={hms(s?.in_bed_s)} tone="sleep" />
+            <StatTile icon={ClockIcon} label="Time Asleep" value={hms(s?.asleep_s)} tone="sleep" />
           </View>
 
-          <Panel bg={colors.sleepCard}>
+          <Panel tone="sleep">
             <Text style={styles.panelLabel}>Coaching</Text>
             <Text style={styles.panelBody}>{coaching(score, s?.awake_count ?? null, s?.awake_s ?? null, s?.asleep_s ?? null)}</Text>
           </Panel>
 
-          <Pressable style={[styles.rowCard, { backgroundColor: colors.sleepCard }]}>
+          <Surface tone="sleep" style={styles.rowCard}>
             <SparkleIcon size={16} color={colors.text} />
             <Text style={styles.rowCardText}>View insights</Text>
             <ArrowRight size={16} color={colors.textMuted} />
-          </Pressable>
+          </Surface>
 
-          <Panel bg={colors.sleepCard}>
+          <Panel tone="sleep">
             <View style={styles.row}>
               <View style={{ flex: 1, alignItems: "center" }}>
                 <Text style={styles.panelLabel}>Wind down</Text>
@@ -103,7 +107,7 @@ export default function SleepScreen() {
           <Text style={styles.section}>Sleep Timeline</Text>
           <Text style={styles.sectionSub}>{s ? "1 event" : "0 events"}</Text>
           {s ? (
-            <Pressable onPress={() => router.push("/sleep/night")} style={[styles.rowCard, { backgroundColor: colors.sleepCard, paddingVertical: 14 }]}>
+            <Surface tone="sleep" onPress={() => router.push("/sleep/night")} style={[styles.rowCard, { paddingVertical: 14 }]}>
               <View style={styles.moonWrap}><MoonIcon size={18} color={colors.sleep} /></View>
               <View style={{ flex: 1, marginLeft: 10 }}>
                 <Text style={styles.caption}>{s.end ? new Date(s.end).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "–"}</Text>
@@ -111,7 +115,7 @@ export default function SleepScreen() {
                 <Text style={styles.caption}>◑ {score != null ? `${Math.round(score)}%` : "–"}   🛏 {hms(s.asleep_s)}</Text>
               </View>
               <ArrowRight size={16} color={colors.textMuted} />
-            </Pressable>
+            </Surface>
           ) : null}
 
           <Text style={[styles.section, { marginTop: spacing.lg }]}>Trends</Text>
@@ -127,7 +131,7 @@ export default function SleepScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.sleepBg },
-  hero: { paddingBottom: spacing.xl, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
+  hero: { paddingBottom: spacing.xl, overflow: "hidden" },
   heroRing: { alignItems: "center", marginTop: spacing.sm },
   body: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
   row: { flexDirection: "row", gap: 10, marginBottom: spacing.md, alignItems: "center" },
@@ -135,8 +139,8 @@ const styles = StyleSheet.create({
   panelLabel: { ...font.label, color: colors.textMuted },
   panelBody: { ...font.body, color: colors.text, lineHeight: 21, marginTop: 6 },
   bigTime: { ...font.number, fontSize: 24, color: colors.text, marginTop: 4 },
-  rowCard: { flexDirection: "row", alignItems: "center", gap: 8, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md },
-  inner: { backgroundColor: colors.sleepCardRaised, marginBottom: 8, paddingVertical: 12 },
+  rowCard: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: spacing.md },
+  inner: { backgroundColor: "rgba(255,255,255,0.07)", borderRadius: radius.sm, marginBottom: 8, paddingVertical: 12, paddingHorizontal: spacing.lg },
   rowCardText: { ...font.heading, fontSize: 15, color: colors.textMuted, flex: 1 },
   rowTitle: { ...font.heading, fontSize: 15, color: colors.text },
   caption: { ...font.caption, color: colors.textMuted },

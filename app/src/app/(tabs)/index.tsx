@@ -10,6 +10,7 @@ import {
 } from "@/components/icons";
 import { Ring } from "@/components/Ring";
 import { Screen } from "@/components/Screen";
+import { Surface } from "@/components/Surface";
 import { hms, pct } from "@/lib/format";
 import { useDays } from "@/lib/useDays";
 import { DEFAULT_LOCATION, fetchWeather } from "@/lib/weather";
@@ -68,9 +69,9 @@ export default function HomeScreen() {
         />
       </View>
 
-      <View style={styles.ringCard}>
+      <Surface radiusSize={radius.lg} style={styles.ringCard}>
         <View style={styles.ringCol}>
-          <Ring label="Strain" progress={null} value="–%" color={colors.strain} />
+          <Ring label="Strain" progress={null} value="–%" color={colors.strain} hatched />
         </View>
         <View style={styles.divider} />
         <Pressable style={styles.ringCol} onPress={() => router.push("/recovery")}>
@@ -80,12 +81,12 @@ export default function HomeScreen() {
         <Pressable style={styles.ringCol} onPress={() => router.push("/sleep")}>
           <Ring label="Sleep" progress={sleep ? sleep.value / 100 : null} value={sleep ? pct(sleep.value) : "–%"} color={colors.sleep} />
         </Pressable>
-      </View>
+      </Surface>
       {!today && !q.isLoading ? (
-        <View style={styles.card}>
+        <Surface style={styles.card}>
           <Text style={styles.emptyTitle}>Nothing to see yet!</Text>
           <Text style={styles.empty}>{q.isError ? `Cannot reach the backend (${String(q.error)})` : "Sync your COROS data to get insights about your Recovery state."}</Text>
-        </View>
+        </Surface>
       ) : null}
 
       <SectionTitle title="Stress & Energy" />
@@ -121,17 +122,17 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   topBar: { flexDirection: "row", justifyContent: "flex-end", marginBottom: spacing.md },
-  topPill: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.card, borderRadius: radius.pill, padding: 4, paddingLeft: 10 },
+  topPill: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(255,255,255,0.06)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.08)", borderRadius: radius.pill, padding: 4, paddingLeft: 10 },
   topBtn: { padding: 6 },
   avatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: "#CFE3FF", alignItems: "center", justifyContent: "center" },
   avatarText: { fontSize: 12, fontWeight: "700", color: "#2B4B7A" },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: spacing.md },
   title: { fontSize: 22, fontWeight: "600", color: colors.text, letterSpacing: -0.3 },
   chips: { flexDirection: "row", gap: 8, marginBottom: spacing.md },
-  ringCard: { flexDirection: "row", alignItems: "center", justifyContent: "space-around", backgroundColor: colors.card, borderRadius: radius.lg, paddingVertical: 18, marginBottom: spacing.md },
+  ringCard: { flexDirection: "row", alignItems: "center", justifyContent: "space-around", paddingVertical: 18, paddingHorizontal: 0, marginBottom: spacing.md },
   ringCol: { flex: 1, alignItems: "center" },
-  divider: { width: StyleSheet.hairlineWidth, height: 84, backgroundColor: colors.hairline },
-  card: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md, alignItems: "center" },
+  divider: { width: StyleSheet.hairlineWidth, height: 84, backgroundColor: "rgba(255,255,255,0.08)" },
+  card: { marginBottom: spacing.md, alignItems: "center" },
   emptyTitle: { ...font.heading, color: colors.text },
   empty: { ...font.body, color: colors.textMuted, textAlign: "center", marginTop: 4 },
   grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },

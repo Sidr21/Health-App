@@ -1,36 +1,26 @@
 import React, { type PropsWithChildren } from "react";
-import { Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
+import { StyleSheet, Text, type ViewStyle } from "react-native";
 
+import { Surface, type SurfaceTone } from "@/components/Surface";
 import { colors, font, radius, spacing } from "@/theme/tokens";
 
 interface Props {
   title?: string;
   onPress?: () => void;
   style?: ViewStyle;
+  tone?: SurfaceTone;
 }
 
-export function Card({ title, onPress, style, children }: PropsWithChildren<Props>) {
-  const body = (
-    <View style={[styles.card, style]}>
+export function Card({ title, onPress, style, tone = "card", children }: PropsWithChildren<Props>) {
+  return (
+    <Surface tone={tone} onPress={onPress} radiusSize={radius.lg} style={[styles.card, style]}>
       {title ? <Text style={styles.title}>{title}</Text> : null}
       {children}
-    </View>
-  );
-  return onPress ? (
-    <Pressable onPress={onPress} style={({ pressed }) => (pressed ? { opacity: 0.85 } : undefined)}>
-      {body}
-    </Pressable>
-  ) : (
-    body
+    </Surface>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-  },
+  card: { marginBottom: spacing.md },
   title: { ...font.label, color: colors.textMuted, marginBottom: spacing.sm },
 });

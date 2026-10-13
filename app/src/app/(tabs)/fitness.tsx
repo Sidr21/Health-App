@@ -46,7 +46,7 @@ export default function FitnessScreen() {
   const weekKcal = q.days.filter((d) => week.includes(d.date)).reduce((s, d) => s + d.activities.reduce((t, a) => t + (a.calories ?? 0), 0), 0);
 
   return (
-    <Screen refreshing={q.isFetching} onRefresh={() => q.refetch()}>
+    <Screen glow="fitness" refreshing={q.isFetching} onRefresh={() => q.refetch()}>
       <Header
         centered
         title="Fitness"

@@ -1,7 +1,9 @@
 import React from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { Backdrop } from "@/components/Backdrop";
 import { DetailHeader } from "@/components/DetailHeader";
+import { Surface } from "@/components/Surface";
 import { BedIcon, ClockIcon, HeartIcon, MoonIcon, PulseIcon, ZzzIcon } from "@/components/icons";
 import { Ring } from "@/components/Ring";
 import { GradeCell, Panel, gradeFor } from "@/components/Tiles";
@@ -15,7 +17,7 @@ function MiniRing({ frac, color }: { frac: number; color: string }) {
   const c = 2 * Math.PI * r;
   return (
     <Svg width={32} height={32} viewBox="0 0 32 32">
-      <Circle cx={16} cy={16} r={r} stroke={colors.hairline} strokeWidth={4} fill="none" />
+      <Circle cx={16} cy={16} r={r} stroke="rgba(0,0,0,0.35)" strokeWidth={4} fill="none" />
       <Circle cx={16} cy={16} r={r} stroke={color} strokeWidth={4} fill="none" strokeDasharray={`${c} ${c}`} strokeDashoffset={c * (1 - Math.min(1, frac))} transform="rotate(-90 16 16)" strokeLinecap="round" />
     </Svg>
   );
@@ -24,14 +26,14 @@ function MiniRing({ frac, color }: { frac: number; color: string }) {
 function StageCard({ label, seconds, total, color }: { label: string; seconds: number | null; total: number | null; color: string }) {
   const frac = seconds != null && total ? seconds / total : 0;
   return (
-    <View style={styles.stage}>
+    <Surface tone="sleep" style={styles.stage}>
       <View style={{ flex: 1 }}>
         <Text style={styles.stageLabel}>{label}</Text>
         <Text style={styles.stageValue}>{hms(seconds)}</Text>
         <Text style={[styles.stagePct, { color }]}>{Math.round(frac * 100)}%</Text>
       </View>
       <MiniRing frac={frac} color={color} />
-    </View>
+    </Surface>
   );
 }
 
@@ -50,19 +52,20 @@ export default function PrimarySleepScreen() {
 
   return (
     <View style={styles.screen}>
+      <Backdrop glow="sleep" bg={colors.sleepBg} height={420} />
       <ScrollView contentContainerStyle={{ paddingBottom: spacing.xxl }}>
         <DetailHeader title="" mode="close" />
         <View style={styles.body}>
           <Text style={styles.title}>Primary sleep</Text>
           <Text style={styles.subtitle}>{startLabel}</Text>
 
-          <View style={[styles.rowCard, { marginTop: spacing.lg }]}>
+          <Surface tone="sleep" style={[styles.rowCard, { marginTop: spacing.lg }]}>
             <Text style={styles.rowText}>Sleep Score</Text>
             <Text style={styles.rowValue}>{score != null ? `${Math.round(score)}%` : "–"}</Text>
-            <Ring progress={score != null ? score / 100 : null} value="" color={colors.sleep} size={30} stroke={5} marker={false} trackColor={colors.sleepCardRaised} />
-          </View>
+            <Ring progress={score != null ? score / 100 : null} value="" color="#8F9BFF" size={30} stroke={5} marker={false} trackColor="rgba(0,0,0,0.35)" />
+          </Surface>
 
-          <Panel bg={colors.sleepCard} style={{ padding: 10 }}>
+          <Panel tone="sleep" style={{ padding: 10 }}>
             <View style={[styles.rowCard, styles.inner]}>
               <BedIcon size={14} color={colors.textMuted} />
               <Text style={styles.rowText}>Sleep Period</Text>
@@ -92,7 +95,7 @@ export default function PrimarySleepScreen() {
           </View>
 
           <Text style={styles.section}>Sleeping Heart Rate</Text>
-          <Panel bg={colors.sleepCard}>
+          <Panel tone="sleep">
             <Text style={styles.big}>{s?.hr_avg ?? "–"} <Text style={styles.label}>bpm</Text></Text>
             <Text style={styles.caption}>AVERAGE HR · min {s?.hr_min ?? "–"} bpm. The overnight curve needs the FIT sleep record.</Text>
           </Panel>
@@ -107,8 +110,8 @@ const styles = StyleSheet.create({
   body: { paddingHorizontal: spacing.lg },
   title: { fontSize: 24, fontWeight: "700", color: colors.text },
   subtitle: { ...font.body, color: colors.textMuted, marginTop: 2 },
-  rowCard: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.sleepCard, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md },
-  inner: { backgroundColor: colors.sleepCardRaised, marginBottom: 8, borderRadius: radius.sm },
+  rowCard: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: spacing.md },
+  inner: { backgroundColor: "rgba(255,255,255,0.07)", marginBottom: 8, borderRadius: radius.sm, padding: spacing.lg },
   rowText: { ...font.heading, fontSize: 15, color: colors.text, flex: 1 },
   rowValue: { ...font.heading, fontSize: 15, color: colors.text },
   rowValueSm: { ...font.label, color: colors.text },
@@ -120,7 +123,7 @@ const styles = StyleSheet.create({
   section: { ...font.heading, fontSize: 17, color: colors.text, marginTop: spacing.lg, marginBottom: 4 },
   caption: { ...font.caption, color: colors.textMuted, marginBottom: spacing.md },
   stageGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
-  stage: { width: "48%", flexDirection: "row", alignItems: "center", backgroundColor: colors.sleepCard, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md },
+  stage: { width: "48%", flexDirection: "row", alignItems: "center", marginBottom: spacing.md },
   stageLabel: { ...font.label, color: colors.textMuted },
   stageValue: { ...font.number, fontSize: 20, color: colors.text, marginTop: 4 },
   stagePct: { ...font.label, marginTop: 2 },

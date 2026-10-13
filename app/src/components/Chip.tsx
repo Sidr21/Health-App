@@ -1,7 +1,8 @@
 import React, { type ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import { ChevronDown } from "@/components/icons";
+import { Surface } from "@/components/Surface";
 import { colors, font, radius } from "@/theme/tokens";
 
 interface Props {
@@ -16,14 +17,14 @@ interface Props {
 /** Bevel's status / weather chips under the Home header. */
 export function Chip({ icon, iconBg, title, subtitle, dropdown, onPress }: Props) {
   return (
-    <Pressable onPress={onPress} style={styles.chip}>
+    <Surface onPress={onPress} padded={false} radiusSize={radius.pill} style={styles.chip}>
       <View style={[styles.iconWrap, iconBg ? { backgroundColor: iconBg } : null]}>{icon}</View>
       <View style={{ flexShrink: 1 }}>
         <Text style={styles.title} numberOfLines={1}>{title}</Text>
         {subtitle ? <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text> : null}
       </View>
       {dropdown ? <View style={{ marginLeft: "auto" }}><ChevronDown size={14} color={colors.textMuted} /></View> : null}
-    </Pressable>
+    </Surface>
   );
 }
 
@@ -32,8 +33,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: colors.card,
-    borderRadius: radius.pill,
     paddingVertical: 7,
     paddingLeft: 7,
     paddingRight: 12,

@@ -1,15 +1,17 @@
-import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { Backdrop } from "@/components/Backdrop";
 import { DetailHeader } from "@/components/DetailHeader";
+import { SkyHero } from "@/components/SkyHero";
+import { Surface } from "@/components/Surface";
 import { HeartIcon, LeafIcon, PulseIcon } from "@/components/icons";
 import { MetricCard } from "@/components/MetricCard";
 import { Ring } from "@/components/Ring";
 import { Panel } from "@/components/Tiles";
 import { insightFor } from "@/lib/insight";
 import { useDays } from "@/lib/useDays";
-import { bandColor, colors, font, radius, spacing } from "@/theme/tokens";
+import { bandColor, colors, font, spacing } from "@/theme/tokens";
 
 interface RecoveryComps {
   band?: "green" | "amber" | "red";
@@ -20,12 +22,6 @@ interface RecoveryComps {
   z?: Record<string, number | null>;
 }
 
-const heroColors: Record<string, [string, string]> = {
-  green: ["#1F4D3A", "#122A21"],
-  amber: ["#4D3A14", "#2A2110"],
-  red: ["#4D1F1F", "#2A1212"],
-  none: ["#2A2B33", "#17181D"],
-};
 
 export default function RecoveryScreen() {
   const q = useDays(28);
@@ -34,30 +30,31 @@ export default function RecoveryScreen() {
   const comps = (rec?.components ?? {}) as RecoveryComps;
   const insight = insightFor(today);
   const title = today ? new Date(`${today.date}T00:00:00`).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" }) : "";
-  const hero = heroColors[comps.band ?? "none"];
   const hrvSeries = q.days.map((d) => ((d.scores.recovery?.components as { hrv_ms?: number } | null)?.hrv_ms ?? null));
 
   return (
     <View style={styles.screen}>
+      <Backdrop glow={comps.band ?? "home"} height={600} />
       <ScrollView contentContainerStyle={{ paddingBottom: spacing.xxl }}>
-        <LinearGradient colors={[hero[0], hero[1], colors.bg]} locations={[0, 0.6, 1]} style={styles.hero}>
+        <View style={styles.hero}>
+          <SkyHero variant={comps.band === "red" ? "dusk" : comps.band === "amber" ? "golden" : "day"} />
           <DetailHeader title="Recovery" subtitle={title} dropdown />
           <View style={{ alignItems: "center" }}>
-            <Ring progress={rec ? rec.value / 100 : null} value={rec ? `${Math.round(rec.value)}%` : "–%"} caption="recovered" color={bandColor(comps.band)} size={170} stroke={14} trackColor="rgba(255,255,255,0.08)" />
+            <Ring progress={rec ? rec.value / 100 : null} value={rec ? `${Math.round(rec.value)}%` : "–%"} caption="recovered" color={bandColor(comps.band)} size={170} stroke={14} trackColor="rgba(0,0,0,0.35)" halo />
           </View>
-        </LinearGradient>
+        </View>
         <View style={styles.body}>
           <View style={styles.row}>
-            <View style={styles.tile}>
+            <Surface style={styles.tile}>
               <View style={styles.tileHead}><PulseIcon size={13} color={colors.textMuted} /><Text style={styles.label}>Resting HRV</Text></View>
               <Text style={styles.big}>{comps.hrv_ms != null ? comps.hrv_ms.toFixed(0) : "–"} <Text style={styles.label}>ms</Text></Text>
               <Text style={[styles.delta, { color: (comps.hrv_ms ?? 0) >= (comps.hrv_base_ms ?? 0) ? colors.recovery : colors.cardio }]}>{comps.hrv_base_ms != null ? `usual ${comps.hrv_base_ms.toFixed(0)} ms` : ""}</Text>
-            </View>
-            <View style={styles.tile}>
+            </Surface>
+            <Surface style={styles.tile}>
               <View style={styles.tileHead}><HeartIcon size={13} color={colors.textMuted} /><Text style={styles.label}>Resting HR</Text></View>
               <Text style={styles.big}>{comps.rhr ?? "–"} <Text style={styles.label}>bpm</Text></Text>
               <Text style={[styles.delta, { color: (comps.rhr ?? 0) <= (comps.rhr_base ?? 0) ? colors.recovery : colors.strain }]}>{comps.rhr_base != null ? `usual ${comps.rhr_base.toFixed(0)} bpm` : ""}</Text>
-            </View>
+            </Surface>
           </View>
           {insight ? (
             <Panel>
@@ -86,10 +83,10 @@ export default function RecoveryScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  hero: { paddingBottom: spacing.xl, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
+  hero: { paddingBottom: spacing.xl, overflow: "hidden" },
   body: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
   row: { flexDirection: "row", gap: 10, marginBottom: spacing.md },
-  tile: { flex: 1, backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.lg },
+  tile: { flex: 1 },
   tileHead: { flexDirection: "row", alignItems: "center", gap: 6 },
   label: { ...font.label, color: colors.textMuted },
   big: { ...font.number, fontSize: 26, color: colors.text, marginTop: 6 },

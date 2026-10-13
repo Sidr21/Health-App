@@ -2,9 +2,10 @@
 import { router } from "expo-router";
 import React, { type ComponentType } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import Svg, { Circle, Defs, LinearGradient, Path, Rect, Stop } from "react-native-svg";
+import Svg, { Circle, Defs, LinearGradient, Path, RadialGradient, Rect, Stop } from "react-native-svg";
 
 import { ArrowRight, BoltIcon, CheckCircle, MoonIcon, type IconProps } from "@/components/icons";
+import { Surface } from "@/components/Surface";
 import { colors, font, radius, spacing } from "@/theme/tokens";
 
 function polar(cx: number, cy: number, r: number, deg: number) {
@@ -31,8 +32,12 @@ export function StressGauge({ value, size = 88 }: { value: number | null; size?:
             <Stop offset="0.5" stopColor="#F5C542" />
             <Stop offset="1" stopColor="#FF453A" />
           </LinearGradient>
+          <RadialGradient id="stressdisc" cx="35%" cy="30%" r="80%">
+            <Stop offset="0" stopColor="#34353F" />
+            <Stop offset="1" stopColor="#1A1B21" />
+          </RadialGradient>
         </Defs>
-        <Circle cx={cx} cy={cy} r={r - 6} fill={colors.cardRaised} />
+        <Circle cx={cx} cy={cy} r={r - 6} fill="url(#stressdisc)" stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
         {ticks.map((a, i) => {
           const o = polar(cx, cy, r + 4, a);
           const inn = polar(cx, cy, r - 1, a);
@@ -55,7 +60,7 @@ export function StressCard({ avg, min, max, updated, onPress }: { avg: number | 
     </View>
   );
   return (
-    <Pressable onPress={onPress} style={styles.card}>
+    <Surface onPress={onPress} style={styles.card}>
       <View style={styles.rowBetween}>
         <View style={{ flex: 1 }}>
           <View style={styles.rowCenter}>
@@ -74,7 +79,7 @@ export function StressCard({ avg, min, max, updated, onPress }: { avg: number | 
         <StressGauge value={avg} />
       </View>
       <View style={styles.arrow}><ArrowRight size={16} color={colors.textMuted} /></View>
-    </Pressable>
+    </Surface>
   );
 }
 
@@ -83,15 +88,21 @@ export function EnergyBar({ pct }: { pct: number | null }) {
   const n = 48;
   const lit = pct == null ? 0 : Math.round((pct / 100) * n);
   return (
-    <View style={[styles.card, styles.energy]}>
+    <Surface style={[styles.card, styles.energy]}>
       <BoltIcon size={16} color={colors.recovery} />
       <Svg width={240} height={16} style={{ flex: 1 }}>
+        <Defs>
+          <LinearGradient id="energyg" x1="0" y1="0" x2="1" y2="0">
+            <Stop offset="0" stopColor="#2ECC71" />
+            <Stop offset="1" stopColor="#7CFF9E" />
+          </LinearGradient>
+        </Defs>
         {Array.from({ length: n }, (_, i) => (
-          <Rect key={i} x={i * 5} y={2} width={2.4} height={12} rx={1} fill={i < lit ? colors.recovery : colors.hairline} />
+          <Rect key={i} x={i * 5} y={2} width={2.4} height={12} rx={1} fill={i < lit ? "url(#energyg)" : "rgba(255,255,255,0.10)"} />
         ))}
       </Svg>
       <Text style={styles.energyValue}>{pct == null ? "–%" : `${Math.round(pct)}%`}</Text>
-    </View>
+    </Surface>
   );
 }
 
@@ -101,7 +112,7 @@ function VerticalMeter({ frac, color, height = 72 }: { frac: number | null; colo
   const fillH = frac == null ? 0 : Math.max(6, Math.min(height - 4, frac * (height - 4)));
   return (
     <Svg width={w + 6} height={height}>
-      <Rect x={3} y={0} width={w} height={height} rx={w / 2} fill={colors.cardRaised} />
+      <Rect x={3} y={0} width={w} height={height} rx={w / 2} fill="rgba(0,0,0,0.35)" stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
       {frac != null ? (
         <>
           <Rect x={3} y={height - fillH} width={w} height={fillH} rx={w / 2} fill={color} opacity={0.9} />
@@ -127,7 +138,7 @@ export interface MonitorTileProps {
 export function MonitorTile({ icon: Icon, label, value, unit, status, frac, color = colors.recovery, onPress }: MonitorTileProps) {
   const empty = value == null;
   return (
-    <Pressable onPress={onPress} style={[styles.card, styles.tile]}>
+    <Surface onPress={onPress} style={[styles.card, styles.tile]}>
       <View style={{ flex: 1 }}>
         <View style={styles.rowCenter}>
           <Icon size={14} color={colors.textMuted} />
@@ -151,7 +162,7 @@ export function MonitorTile({ icon: Icon, label, value, unit, status, frac, colo
         )}
       </View>
       <VerticalMeter frac={empty ? null : frac} color={color} />
-    </Pressable>
+    </Surface>
   );
 }
 
@@ -159,7 +170,7 @@ export function TimelineSleepCard({ end, score, asleepS }: { end: string | null;
   const time = end ? new Date(end).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "–";
   const h = asleepS != null ? `${Math.floor(asleepS / 3600)}h ${Math.round((asleepS % 3600) / 60)}m` : "–";
   return (
-    <View style={styles.card}>
+    <Surface style={styles.card}>
       <Pressable onPress={() => router.push("/sleep/night")} style={styles.rowCenter}>
         <View style={styles.moonWrap}><MoonIcon size={18} color={colors.sleep} /></View>
         <View style={{ flex: 1, marginLeft: 10 }}>
@@ -172,7 +183,7 @@ export function TimelineSleepCard({ end, score, asleepS }: { end: string | null;
       <Pressable onPress={() => router.push("/sleep")} style={styles.button}>
         <Text style={styles.buttonText}>View timeline</Text>
       </Pressable>
-    </View>
+    </Surface>
   );
 }
 
@@ -186,7 +197,7 @@ export function SectionTitle({ title, sub }: { title: string; sub?: string }) {
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md },
+  card: { marginBottom: spacing.md },
   rowBetween: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   rowCenter: { flexDirection: "row", alignItems: "center", gap: 6 },
   dot: { width: 8, height: 8, borderRadius: 4 },
@@ -201,14 +212,14 @@ const styles = StyleSheet.create({
   gaugeValue: { textAlign: "center", color: colors.text, fontSize: 18, fontWeight: "600" },
   energy: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12 },
   energyValue: { ...font.heading, fontSize: 15, color: colors.text, minWidth: 44, textAlign: "right" },
-  tile: { width: "48%", flexDirection: "row", alignItems: "center", minHeight: 104 },
+  tile: { width: "48%", flexDirection: "row", alignItems: "center", minHeight: 104, padding: 14 },
   tileLabel: { ...font.label, color: colors.textMuted },
   tileValue: { ...font.number, fontSize: 24, color: colors.text, marginTop: 6 },
   tileUnit: { fontSize: 14, color: colors.textMuted, fontWeight: "500" },
   tileStatus: { ...font.label, fontSize: 14 },
   noData: { fontSize: 22, fontWeight: "600", color: colors.textFaint, marginTop: 6, lineHeight: 26 },
   moonWrap: { width: 40, height: 40, borderRadius: 20, backgroundColor: `${colors.sleep}26`, alignItems: "center", justifyContent: "center" },
-  button: { marginTop: spacing.md, backgroundColor: colors.cardRaised, borderRadius: radius.sm, paddingVertical: 12, alignItems: "center" },
+  button: { marginTop: spacing.md, backgroundColor: "rgba(255,255,255,0.08)", borderRadius: radius.sm, paddingVertical: 12, alignItems: "center", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.08)" },
   buttonText: { ...font.heading, fontSize: 15, color: colors.text },
   section: { ...font.heading, fontSize: 17, color: colors.text },
 });
