@@ -108,8 +108,8 @@ Journal tags and notes, race results (used to validate VO2max), HRmax tests, sic
 
 ```
 ┌──────────────────────────┐      ┌──────────────────────────────┐
-│  COROS (MCP or Hub API)  │      │  Apple Health (HealthKit /   │
-│  activities, FIT, daily  │      │  Health Auto Export webhook) │
+│  COROS (MCP or Hub API)  │      │  Apple Health (HealthKit,    │
+│  activities, FIT, daily  │      │  read by the app)            │
 └────────────┬─────────────┘      └───────────────┬──────────────┘
              │ pull (cron, every 15 min)           │ app POSTs new samples
              ▼                                     ▼
@@ -418,13 +418,12 @@ Suggested first session after this doc is approved: phase 0 + the MCP-client spi
 ## 10. Open items (need your input)
 
 1. ~~Client~~ — decided: native iOS via React Native / Expo (4.1).
-2. **HRmax**: field test is now in your COROS workout library (`docs/engine/hrmax-test.md`); tell me a date to schedule it. Any recent race results (date, distance, time) to validate VO2max against?
-3. **COROS → Apple Health sync**: is it enabled on your phone today, and do you have any other HealthKit writers (scale, Apple Watch)?
-4. **Hosting**: run on a home machine (Docker) or a small cloud box?
-5. ~~Bevel screenshots~~ — received and filed in `docs/reference/bevel/`; section 7 now mirrors them. Still useful if you have them: the Trends tab, a workout detail, and the Journal screen (from inside the app rather than the marketing site).
-7. **Apple Developer account**: do you have one? Needed for TestFlight / internal builds.
-8. **Smart scale app**: which scale, and does its own app write to Apple Health?
-6. **Units**: km and kg assumed.
+2. ~~Smart scale~~ — writes to COROS (3.2). Still needed: which scale, and does its own app also write to Apple Health?
+3. ~~Bevel screenshots~~ — received and filed in `docs/reference/bevel/`; section 7 mirrors them. Still useful: the Trends tab, a workout detail and the Journal screen from inside the app.
+4. **HRmax**: field test is in your COROS workout library (`docs/engine/hrmax-test.md`); tell me a date to schedule it. Any recent race results (date, distance, time) to validate VO2max against?
+5. **Apple Developer account**: do you have one? Needed for TestFlight / internal dev builds.
+6. **Hosting**: run on a home machine (Docker) or a small cloud box? The phone has to reach it.
+7. **Units**: km and kg assumed.
 
 ---
 
