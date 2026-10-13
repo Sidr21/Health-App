@@ -303,6 +303,14 @@ Screen shows the number, delta vs chronological age, and a "this week's changes"
 
 Tab bar, matching Bevel's: **Home · Journal · Fitness · Biology**, plus a floating **+** (manual workout / journal entry). Trends live inside Biology (vitals, body, biological age); workouts live inside Fitness. Settings behind the avatar on Home. Dark theme.
 
+**Visual identity.** Layout and flow follow Bevel. The look is deliberately our own, borrowing Whoop's data-first tone:
+- **Palette.** Cool blue-black backgrounds. Recovery is mint (`#2EE6A6`), strain is electric blue (`#3D8BFF`), sleep is lavender (`#A78BFA`).
+- **Dials.** Score rings are open 270° arcs with a glowing tip and an uppercase label underneath, not Bevel's closed rings.
+- **Type.** Numbers and overlines use Barlow Semi Condensed. Section and tile labels are tracked uppercase.
+- **Surfaces.** Cards keep Bevel's soft top-lit gradient. Detail heroes use an abstract "aurora" glow in place of Bevel's sky illustrations.
+- **Health Monitor.** Each tile shows today's value as a dot on a range bar against the 28-day normal. Metrics the sources don't provide collapse into one "Not tracked yet" row instead of empty tiles.
+- **Vitals strip.** HRV, resting HR and sleep sit under the dials with 14-day sparklines.
+
 **Today** (ref `01-today-home.png`)
 ```
 ┌─────────────────────────────────┐

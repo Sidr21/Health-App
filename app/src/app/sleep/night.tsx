@@ -62,7 +62,7 @@ export default function PrimarySleepScreen() {
           <Surface tone="sleep" style={[styles.rowCard, { marginTop: spacing.lg }]}>
             <Text style={styles.rowText}>Sleep Score</Text>
             <Text style={styles.rowValue}>{score != null ? `${Math.round(score)}%` : "–"}</Text>
-            <Ring progress={score != null ? score / 100 : null} value="" color="#8F9BFF" size={30} stroke={5} marker={false} trackColor="rgba(0,0,0,0.35)" />
+            <Ring progress={score != null ? score / 100 : null} value="" color={colors.sleep} size={30} stroke={5} marker={false} trackColor="rgba(0,0,0,0.35)" />
           </Surface>
 
           <Panel tone="sleep" style={{ padding: 10 }}>

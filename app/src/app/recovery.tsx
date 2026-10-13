@@ -3,14 +3,14 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { Backdrop } from "@/components/Backdrop";
 import { DetailHeader } from "@/components/DetailHeader";
-import { SkyHero } from "@/components/SkyHero";
+import { Aurora } from "@/components/Aurora";
 import { Surface } from "@/components/Surface";
 import { HeartIcon, LeafIcon, PulseIcon } from "@/components/icons";
 import { MetricCard } from "@/components/MetricCard";
-import { Ring } from "@/components/Ring";
+import { Dial } from "@/components/Dial";
 import { Panel } from "@/components/Tiles";
 import { insightFor } from "@/lib/insight";
-import { useDays } from "@/lib/useDays";
+import { todayIso, useDays } from "@/lib/useDays";
 import { bandColor, colors, font, spacing } from "@/theme/tokens";
 
 interface RecoveryComps {
@@ -29,7 +29,7 @@ export default function RecoveryScreen() {
   const rec = today?.scores.recovery;
   const comps = (rec?.components ?? {}) as RecoveryComps;
   const insight = insightFor(today);
-  const title = today ? new Date(`${today.date}T00:00:00`).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" }) : "";
+  const title = new Date(`${today?.date ?? todayIso()}T00:00:00`).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
   const hrvSeries = q.days.map((d) => ((d.scores.recovery?.components as { hrv_ms?: number } | null)?.hrv_ms ?? null));
 
   return (
@@ -37,10 +37,10 @@ export default function RecoveryScreen() {
       <Backdrop glow={comps.band ?? "home"} height={600} />
       <ScrollView contentContainerStyle={{ paddingBottom: spacing.xxl }}>
         <View style={styles.hero}>
-          <SkyHero variant={comps.band === "red" ? "dusk" : comps.band === "amber" ? "golden" : "day"} />
+          <Aurora variant={comps.band === "red" ? "red" : comps.band === "amber" ? "amber" : "mint"} />
           <DetailHeader title="Recovery" subtitle={title} dropdown />
           <View style={{ alignItems: "center" }}>
-            <Ring progress={rec ? rec.value / 100 : null} value={rec ? `${Math.round(rec.value)}%` : "–%"} caption="recovered" color={bandColor(comps.band)} size={170} stroke={14} trackColor="rgba(0,0,0,0.35)" halo />
+            <Dial progress={rec ? rec.value / 100 : null} value={rec ? `${Math.round(rec.value)}%` : "–"} caption="Recovered" color={bandColor(comps.band)} size={210} stroke={12} />
           </View>
         </View>
         <View style={styles.body}>
@@ -62,15 +62,15 @@ export default function RecoveryScreen() {
               <Text style={styles.insightBody}>{insight.body}</Text>
             </Panel>
           ) : null}
-          <Text style={styles.section}>How this was computed</Text>
-          <Panel>
+          {comps.z ? <Text style={styles.section}>How this was computed</Text> : null}
+          {comps.z ? <Panel>
             {Object.entries(comps.z ?? {}).map(([k, v]) => (
               <View key={k} style={styles.zRow}>
                 <Text style={styles.label}>{({ hrv: "HRV vs 28-day baseline", rhr: "Resting HR vs baseline", sleep: "Sleep score", sleep_hr: "Sleep HR vs baseline", strain: "Yesterday's strain" } as Record<string, string>)[k] ?? k}</Text>
                 <Text style={[styles.zVal, { color: v == null ? colors.textFaint : v >= 0 ? colors.recovery : colors.strain }]}>{v == null ? "n/a" : `${v >= 0 ? "+" : ""}${v.toFixed(2)} σ`}</Text>
               </View>
             ))}
-          </Panel>
+          </Panel> : null}
           <Text style={styles.section}>Trends</Text>
           <MetricCard icon={LeafIcon} title="Recovery" value={rec ? String(Math.round(rec.value)) : "–"} unit="%" series={q.days.map((d) => d.scores.recovery?.value ?? null)} band={{ low: 34, high: 67 }} color={colors.recovery} />
           <MetricCard icon={PulseIcon} title="Resting HRV" value={comps.hrv_ms != null ? comps.hrv_ms.toFixed(0) : "–"} unit="ms" series={hrvSeries} band={comps.hrv_base_ms ? { low: comps.hrv_base_ms * 0.85, high: comps.hrv_base_ms * 1.15 } : null} color={colors.recovery} />

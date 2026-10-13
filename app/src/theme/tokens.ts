@@ -1,40 +1,50 @@
-/** Dark design tokens matching Bevel's in-app screens (docs/reference/bevel/09–16). */
+/**
+ * Design tokens. Our own identity: Bevel's information layout, but a cooler blue-black palette,
+ * Whoop-style open dials, uppercase micro-labels and abstract aurora heroes instead of illustrations.
+ */
 export const colors = {
-  bg: "#0E0F13",
-  card: "#1A1B22",
-  cardRaised: "#262830",
-  pill: "#1F2027",
-  border: "#2A2B33",
-  hairline: "#30313A",
-  // sleep screens use a navy palette
-  sleepBg: "#0F1226",
-  sleepCard: "#1A1F3E",
-  sleepCardRaised: "#242A52",
-  text: "#F4F4F6",
-  textMuted: "#9C9DA6",
-  textFaint: "#62636C",
+  bg: "#0A0C11",
+  card: "#13161D",
+  cardRaised: "#1C2029",
+  pill: "#161A22",
+  border: "#222733",
+  hairline: "#2A3040",
+  text: "#F3F5F9",
+  textMuted: "#8E96A6",
+  textFaint: "#565D6B",
+  // sleep screens use a deep indigo palette
+  sleepBg: "#0B0D1F",
+  sleepCard: "#161A3A",
+  sleepCardRaised: "#1F2550",
   // category accents
-  recovery: "#4CD964",
-  recoveryAmber: "#F5B400",
-  recoveryRed: "#FF453A",
-  sleep: "#7B8CFF",
-  sleepDeep: "#9B6BFF",
-  sleepRem: "#6FC8FF",
-  sleepAwake: "#FF9F43",
-  strain: "#FF7A3D",
-  stress: "#F5C542",
-  energy: "#36D1C4",
-  cardio: "#4C8DFF",
-  muscular: "#38C6FF",
-  ring: "#2C2D33",
-  run: "#3DD6A4",
-  bike: "#8B7CFF",
-  hike: "#7FD35E",
-  gold: "#D4A72C",
+  recovery: "#2EE6A6",
+  recoveryAmber: "#F7C948",
+  recoveryRed: "#FF5C5C",
+  sleep: "#A78BFA",
+  sleepDeep: "#7C5CFF",
+  sleepRem: "#67D4FF",
+  sleepAwake: "#FFA657",
+  strain: "#3D8BFF",
+  stress: "#F7B955",
+  energy: "#56E0FF",
+  cardio: "#3D8BFF",
+  muscular: "#56E0FF",
+  ring: "#1B1F28",
+  run: "#2EE6A6",
+  bike: "#A78BFA",
+  hike: "#8BE07A",
+  gold: "#E0B64A",
+} as const;
+
+/** Condensed face for numerals and uppercase labels; body text stays on the system font. */
+export const fonts = {
+  numeral: "BarlowSemiCondensed_600SemiBold",
+  numeralBold: "BarlowSemiCondensed_700Bold",
+  label: "BarlowSemiCondensed_600SemiBold",
 } as const;
 
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;
-export const radius = { sm: 12, md: 18, lg: 26, pill: 999 } as const;
+export const radius = { sm: 12, md: 18, lg: 24, pill: 999 } as const;
 
 export const font = {
   display: { fontSize: 34, fontWeight: "700" as const, letterSpacing: -0.6 },
@@ -43,7 +53,9 @@ export const font = {
   body: { fontSize: 15, fontWeight: "400" as const },
   label: { fontSize: 13, fontWeight: "500" as const },
   caption: { fontSize: 12, fontWeight: "500" as const },
-  number: { fontSize: 30, fontWeight: "700" as const, fontVariant: ["tabular-nums"] as ("tabular-nums")[] },
+  /** uppercase micro-label, Whoop-style */
+  overline: { fontSize: 12, fontFamily: "BarlowSemiCondensed_600SemiBold", letterSpacing: 1.4, textTransform: "uppercase" as const },
+  number: { fontSize: 32, fontFamily: "BarlowSemiCondensed_600SemiBold", fontVariant: ["tabular-nums"] as ("tabular-nums")[], letterSpacing: -0.2 },
 } as const;
 
 export function bandColor(band: "green" | "amber" | "red" | null | undefined): string {

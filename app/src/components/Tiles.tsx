@@ -60,10 +60,10 @@ export function Panel({ children, tone = "card", style }: { children: React.Reac
 const styles = StyleSheet.create({
   tile: { flex: 1 },
   labelRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  label: { ...font.label, color: colors.textMuted },
+  label: { ...font.overline, fontSize: 11, color: colors.textMuted },
   value: { ...font.number, fontSize: 24, color: colors.text, marginTop: 8 },
   grade: { width: "50%", alignItems: "center", paddingVertical: 14 },
   gradeText: { ...font.heading, marginTop: 6 },
-  gradeLabel: { ...font.caption, color: colors.textMuted, marginTop: 2 },
+  gradeLabel: { ...font.overline, fontSize: 10, color: colors.textMuted, marginTop: 2 },
   panel: { marginBottom: spacing.md },
 });

@@ -197,3 +197,12 @@ def test_apple_health_ingest():
     assert len(rows) == 1 and abs(rows[0]["value"] - 67.4) < 0.1
     fat = client.get("/body", params={"metric": "body_fat_pct"}, headers=h).json()
     assert abs(fat[0]["value"] - 15.2) < 0.01
+
+
+def test_day_bounds_utc_uses_local_day():
+    from datetime import datetime
+
+    from health.api.main import day_bounds_utc
+
+    lo, hi = day_bounds_utc(date(2026, 10, 13), "America/New_York")
+    assert lo == datetime(2026, 10, 13, 4, 0) and hi == datetime(2026, 10, 14, 4, 0)

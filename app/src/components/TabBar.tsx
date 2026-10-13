@@ -23,14 +23,14 @@ interface TabBarProps {
   };
 }
 
-const PILL = ["#2E2F38", "#212228"] as const;
+const PILL = ["#222733", "#161A22"] as const;
 
 /** Bevel's floating pill tab bar: gradient glass pill with a highlight border and a separate round "+". */
 export function TabBar({ state, descriptors, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets();
   return (
     <View style={styles.outer} pointerEvents="box-none">
-      <LinearGradient colors={["rgba(14,15,19,0)", "rgba(14,15,19,0.92)", colors.bg]} locations={[0, 0.5, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
+      <LinearGradient colors={["rgba(10,12,17,0)", "rgba(10,12,17,0.92)", colors.bg]} locations={[0, 0.5, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
       <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 14) }]} pointerEvents="box-none">
         <LinearGradient colors={[...PILL]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.pill}>
           {state.routes.map((route, i) => {
@@ -49,7 +49,7 @@ export function TabBar({ state, descriptors, navigation }: TabBarProps) {
                 accessibilityRole="tab"
                 accessibilityState={{ selected: focused }}
               >
-                {focused ? <LinearGradient colors={["#3B3C47", "#2A2B33"]} style={[StyleSheet.absoluteFill, { borderRadius: radius.pill }]} /> : null}
+                {focused ? <LinearGradient colors={["#2F3645", "#232834"]} style={[StyleSheet.absoluteFill, { borderRadius: radius.pill }]} /> : null}
                 <Icon size={22} color={color} />
                 <Text style={[styles.label, { color }]}>{label}</Text>
               </Pressable>

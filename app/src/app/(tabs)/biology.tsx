@@ -5,10 +5,11 @@ import { Card } from "@/components/Card";
 import { Header, RoundButton } from "@/components/Header";
 import { DotsIcon } from "@/components/icons";
 import { Screen } from "@/components/Screen";
+import { SectionLabel } from "@/components/SectionLabel";
 import { Sparkline } from "@/components/Sparkline";
 import { hms } from "@/lib/format";
 import { useDays } from "@/lib/useDays";
-import { colors, font, spacing } from "@/theme/tokens";
+import { colors, font, fonts } from "@/theme/tokens";
 
 function Tile({ title, value, unit, series, color, sub }: { title: string; value: string; unit?: string; series: (number | null)[]; color: string; sub?: string }) {
   return (
@@ -33,7 +34,7 @@ export default function BiologyScreen() {
   return (
     <Screen refreshing={q.isFetching} onRefresh={() => q.refetch()}>
       <Header centered title="Biology" left={<View style={{ width: 44 }} />} right={<RoundButton><DotsIcon size={20} color={colors.text} /></RoundButton>} />
-      <Text style={styles.section}>Vitals · last 28 days</Text>
+      <SectionLabel title="Vitals" note="last 28 days" />
       <View style={styles.grid}>
         <Tile title="Resting HRV" value={comps.hrv_ms != null ? comps.hrv_ms.toFixed(0) : "–"} unit="ms" series={q.days.map((d) => ((d.scores.recovery?.components as { hrv_ms?: number } | null)?.hrv_ms ?? null))} color={colors.recovery} />
         <Tile title="Resting HR" value={latest?.daily.rhr != null ? String(latest.daily.rhr) : "–"} unit="bpm" series={q.days.map((d) => d.daily.rhr)} color={colors.cardio} />
@@ -42,11 +43,11 @@ export default function BiologyScreen() {
         <Tile title="Time asleep" value={hms(latest?.sleep?.asleep_s)} series={q.days.map((d) => (d.sleep?.asleep_s != null ? d.sleep.asleep_s / 3600 : null))} color={colors.sleepDeep} />
         <Tile title="Steps" value={latest?.daily.steps != null ? latest.daily.steps.toLocaleString() : "–"} series={q.days.map((d) => d.daily.steps)} color={colors.energy} />
       </View>
-      <Text style={styles.section}>Body</Text>
+      <SectionLabel title="Body" />
       <Card>
         <Text style={styles.body}>Weight, BMI and body fat appear here once Apple Health is connected on the native build.</Text>
       </Card>
-      <Text style={styles.section}>Biological age</Text>
+      <SectionLabel title="Biological age" />
       <Card>
         <Text style={styles.body}>Weekly, from VO₂max, resting HR, HRV, body composition, sleep and activity (DESIGN §6.8). Needs the fitness models from phase 3.</Text>
       </Card>
@@ -55,12 +56,11 @@ export default function BiologyScreen() {
 }
 
 const styles = StyleSheet.create({
-  section: { ...font.heading, fontSize: 20, color: colors.text, marginTop: spacing.sm, marginBottom: spacing.md },
   grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
-  half: { width: "48%" },
-  tileTitle: { ...font.label, color: colors.textMuted },
-  tileValue: { ...font.number, fontSize: 26, color: colors.text, marginTop: 4 },
-  tileUnit: { fontSize: 14, color: colors.textMuted, fontWeight: "500" },
+  half: { width: "48.5%" },
+  tileTitle: { ...font.overline, fontSize: 11, color: colors.textMuted },
+  tileValue: { ...font.number, fontSize: 28, color: colors.text, marginTop: 6 },
+  tileUnit: { fontSize: 13, color: colors.textMuted, fontFamily: fonts.label },
   tileSub: { ...font.caption, color: colors.textFaint },
   body: { ...font.body, color: colors.textMuted, lineHeight: 21 },
 });

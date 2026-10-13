@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from health import __version__
 from health.api.auth import require_token
+from health.config import settings
 from health.db import get_session, init_db
 from health.models import Activity, BodyMetric, Daily, Score, SleepSession, StressSample, SyncLog
 from health.sources.apple_health import HKPayload, ingest
@@ -36,20 +38,32 @@ def _scores_for(s: Session, d: date) -> dict:
     return {r.kind: {"value": r.value, "components": r.components} for r in rows}
 
 
+def day_bounds_utc(d: date, tz: str | None = None) -> tuple[datetime, datetime]:
+    """Local calendar day -> naive UTC [start, end). Samples and activities are stored in UTC."""
+    zone = ZoneInfo(tz or settings.timezone)
+    start = datetime.combine(d, datetime.min.time(), tzinfo=zone)
+    end = start + timedelta(days=1)
+    return (
+        start.astimezone(UTC).replace(tzinfo=None),
+        end.astimezone(UTC).replace(tzinfo=None),
+    )
+
+
 def _day_payload(s: Session, d: date) -> dict:
     daily = s.get(Daily, d)
     sleep = s.execute(
         select(SleepSession).where(SleepSession.date == d, SleepSession.is_nap.is_(False))
     ).scalar_one_or_none()
+    lo, hi = day_bounds_utc(d)
     acts = s.execute(
         select(Activity)
-        .where(Activity.start_ts >= d, Activity.start_ts < d + timedelta(days=1))
+        .where(Activity.start_ts >= lo, Activity.start_ts < hi)
         .order_by(Activity.start_ts)
     ).scalars()
     stress_lo, stress_hi, stress_last = s.execute(
         select(
             func.min(StressSample.stress), func.max(StressSample.stress), func.max(StressSample.ts)
-        ).where(StressSample.ts >= d, StressSample.ts < d + timedelta(days=1))
+        ).where(StressSample.ts >= lo, StressSample.ts < hi)
     ).one()
     return {
         "date": d.isoformat(),
@@ -61,7 +75,9 @@ def _day_payload(s: Session, d: date) -> dict:
             "stress_avg": daily.stress_avg if daily else None,
             "stress_min": stress_lo,
             "stress_max": stress_hi,
-            "stress_updated": stress_last.isoformat() if stress_last else None,
+            "stress_updated": (
+                stress_last.replace(tzinfo=UTC).isoformat() if stress_last else None
+            ),
             "coros_recovery_pct": daily.coros_recovery_pct if daily else None,
             "coros_stl": daily.coros_stl if daily else None,
             "coros_ltl": daily.coros_ltl if daily else None,
@@ -91,7 +107,7 @@ def _day_payload(s: Session, d: date) -> dict:
                 "id": a.id,
                 "sport": a.sport,
                 "sport_code": a.sport_code,
-                "start": a.start_ts.isoformat(),
+                "start": a.start_ts.replace(tzinfo=UTC).isoformat(),
                 "duration_s": a.duration_s,
                 "distance_m": a.distance_m,
                 "avg_hr": a.avg_hr,
@@ -130,7 +146,7 @@ def activities(limit: int = 50, s: Session = Depends(get_session)) -> list[dict]
             "id": a.id,
             "sport": a.sport,
             "sport_code": a.sport_code,
-            "start": a.start_ts.isoformat(),
+            "start": a.start_ts.replace(tzinfo=UTC).isoformat(),
             "duration_s": a.duration_s,
             "distance_m": a.distance_m,
             "avg_hr": a.avg_hr,

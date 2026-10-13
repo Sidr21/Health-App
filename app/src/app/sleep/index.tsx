@@ -1,17 +1,18 @@
-import { router } from "expo-router";
 import React from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { Backdrop } from "@/components/Backdrop";
 import { DetailHeader } from "@/components/DetailHeader";
-import { SkyHero } from "@/components/SkyHero";
+import { Aurora } from "@/components/Aurora";
 import { Surface } from "@/components/Surface";
 import { ArrowRight, BedIcon, ClockIcon, MoonIcon, SparkleIcon } from "@/components/icons";
+import { TimelineSleepCard } from "@/components/HomeWidgets";
+import { SectionLabel } from "@/components/SectionLabel";
 import { MetricCard } from "@/components/MetricCard";
-import { Ring } from "@/components/Ring";
+import { Dial } from "@/components/Dial";
 import { Panel, StatTile } from "@/components/Tiles";
 import { hms } from "@/lib/format";
-import { useDays } from "@/lib/useDays";
+import { todayIso, useDays } from "@/lib/useDays";
 import { colors, font, radius, spacing } from "@/theme/tokens";
 
 function clock(mins: number): string {
@@ -51,17 +52,17 @@ export default function SleepScreen() {
   const wakeMed = medianMinutes(q.days.slice(-14).map((d) => d.sleep?.end ?? null));
   const needS = 8 * 3600;
   const stripe = (fn: (d: (typeof q.days)[number]) => number | null) => q.days.map(fn);
-  const title = today ? new Date(`${today.date}T00:00:00`).toLocaleDateString(undefined, { month: "long", day: "numeric" }) : "";
+  const title = new Date(`${today?.date ?? todayIso()}T00:00:00`).toLocaleDateString(undefined, { month: "long", day: "numeric" });
 
   return (
     <View style={styles.screen}>
       <Backdrop glow="sleep" bg={colors.sleepBg} height={700} />
       <ScrollView contentContainerStyle={{ paddingBottom: spacing.xxl }}>
         <View style={styles.hero}>
-          <SkyHero variant="night" />
+          <Aurora variant="night" />
           <DetailHeader title="Sleep" subtitle={`Today, ${title}`} dropdown />
           <View style={styles.heroRing}>
-            <Ring progress={score != null ? score / 100 : null} value={score != null ? `${Math.round(score)}%` : "–%"} caption="Quality" color="#8F9BFF" size={170} stroke={14} trackColor="rgba(10,12,40,0.55)" halo />
+            <Dial progress={score != null ? score / 100 : null} value={score != null ? `${Math.round(score)}%` : "–"} caption="Sleep quality" color={colors.sleep} size={210} stroke={12} />
           </View>
         </View>
 
@@ -104,25 +105,14 @@ export default function SleepScreen() {
             </View>
           </Panel>
 
-          <Text style={styles.section}>Sleep Timeline</Text>
-          <Text style={styles.sectionSub}>{s ? "1 event" : "0 events"}</Text>
-          {s ? (
-            <Surface tone="sleep" onPress={() => router.push("/sleep/night")} style={[styles.rowCard, { paddingVertical: 14 }]}>
-              <View style={styles.moonWrap}><MoonIcon size={18} color={colors.sleep} /></View>
-              <View style={{ flex: 1, marginLeft: 10 }}>
-                <Text style={styles.caption}>{s.end ? new Date(s.end).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "–"}</Text>
-                <Text style={styles.rowTitle}>Primary sleep</Text>
-                <Text style={styles.caption}>◑ {score != null ? `${Math.round(score)}%` : "–"}   🛏 {hms(s.asleep_s)}</Text>
-              </View>
-              <ArrowRight size={16} color={colors.textMuted} />
-            </Surface>
-          ) : null}
+          <SectionLabel title="Sleep timeline" note={s ? "1 event" : "0 events"} />
+          {s ? <TimelineSleepCard end={s.end} score={score} asleepS={s.asleep_s} tone="sleep" button={false} /> : null}
 
-          <Text style={[styles.section, { marginTop: spacing.lg }]}>Trends</Text>
-          <MetricCard icon={MoonIcon} title="Sleep Score" value={score != null ? String(Math.round(score)) : "–"} unit="%" status={score != null ? { label: score >= 65 ? "Normal range" : "Below normal", tone: score >= 65 ? "good" : "bad" } : null} series={stripe((d) => d.scores.sleep?.value ?? null)} color={colors.sleep} />
-          <MetricCard icon={ClockIcon} title="Time Asleep" value={hms(s?.asleep_s)} status={s?.asleep_s != null ? { label: s.asleep_s >= 7 * 3600 ? "Normal range" : "Below normal", tone: s.asleep_s >= 7 * 3600 ? "good" : "bad" } : null} series={stripe((d) => (d.sleep?.asleep_s != null ? d.sleep.asleep_s / 3600 : null))} band={{ low: 7, high: 9 }} color={colors.sleep} />
-          <MetricCard icon={MoonIcon} title="REM sleep" value={hms(s?.rem_s)} status={s?.rem_s != null && s.asleep_s ? { label: s.rem_s / s.asleep_s >= 0.18 ? "Normal range" : "Below normal", tone: s.rem_s / s.asleep_s >= 0.18 ? "good" : "bad" } : null} series={stripe((d) => (d.sleep?.rem_s != null ? d.sleep.rem_s / 3600 : null))} color={colors.sleepRem} />
-          <MetricCard icon={MoonIcon} title="Deep sleep" value={hms(s?.deep_s)} status={s?.deep_s != null && s.asleep_s ? { label: s.deep_s / s.asleep_s >= 0.13 ? "Normal range" : "Below normal", tone: s.deep_s / s.asleep_s >= 0.13 ? "good" : "bad" } : null} series={stripe((d) => (d.sleep?.deep_s != null ? d.sleep.deep_s / 3600 : null))} color={colors.sleepDeep} />
+          <SectionLabel title="Trends" note="last 28 nights" />
+          <MetricCard icon={MoonIcon} title="Sleep Score" value={score != null ? String(Math.round(score)) : "–"} unit="%" status={score != null ? { label: score >= 65 ? "Normal range" : "Below normal", tone: score >= 65 ? "good" : "bad", direction: score >= 65 ? undefined : "down" } : null} series={stripe((d) => d.scores.sleep?.value ?? null)} color={colors.sleep} />
+          <MetricCard icon={ClockIcon} title="Time Asleep" value={hms(s?.asleep_s)} status={s?.asleep_s != null ? { label: s.asleep_s >= 7 * 3600 ? "Normal range" : "Below normal", tone: s.asleep_s >= 7 * 3600 ? "good" : "bad", direction: s.asleep_s >= 7 * 3600 ? undefined : "down" } : null} series={stripe((d) => (d.sleep?.asleep_s != null ? d.sleep.asleep_s / 3600 : null))} band={{ low: 7, high: 9 }} color={colors.sleep} />
+          <MetricCard icon={MoonIcon} title="REM sleep" value={hms(s?.rem_s)} status={s?.rem_s != null && s.asleep_s ? { label: s.rem_s / s.asleep_s >= 0.18 ? "Normal range" : "Below normal", tone: s.rem_s / s.asleep_s >= 0.18 ? "good" : "bad", direction: s.rem_s / s.asleep_s >= 0.18 ? undefined : "down" } : null} series={stripe((d) => (d.sleep?.rem_s != null ? d.sleep.rem_s / 3600 : null))} color={colors.sleepRem} />
+          <MetricCard icon={MoonIcon} title="Deep sleep" value={hms(s?.deep_s)} status={s?.deep_s != null && s.asleep_s ? { label: s.deep_s / s.asleep_s >= 0.13 ? "Normal range" : "Below normal", tone: s.deep_s / s.asleep_s >= 0.13 ? "good" : "bad", direction: s.deep_s / s.asleep_s >= 0.13 ? undefined : "down" } : null} series={stripe((d) => (d.sleep?.deep_s != null ? d.sleep.deep_s / 3600 : null))} color={colors.sleepDeep} />
         </View>
       </ScrollView>
     </View>
@@ -136,15 +126,10 @@ const styles = StyleSheet.create({
   body: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
   row: { flexDirection: "row", gap: 10, marginBottom: spacing.md, alignItems: "center" },
   vline: { width: StyleSheet.hairlineWidth, height: 44, backgroundColor: colors.hairline },
-  panelLabel: { ...font.label, color: colors.textMuted },
+  panelLabel: { ...font.overline, fontSize: 11, color: colors.textMuted },
   panelBody: { ...font.body, color: colors.text, lineHeight: 21, marginTop: 6 },
   bigTime: { ...font.number, fontSize: 24, color: colors.text, marginTop: 4 },
   rowCard: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: spacing.md },
   inner: { backgroundColor: "rgba(255,255,255,0.07)", borderRadius: radius.sm, marginBottom: 8, paddingVertical: 12, paddingHorizontal: spacing.lg },
   rowCardText: { ...font.heading, fontSize: 15, color: colors.textMuted, flex: 1 },
-  rowTitle: { ...font.heading, fontSize: 15, color: colors.text },
-  caption: { ...font.caption, color: colors.textMuted },
-  moonWrap: { width: 40, height: 40, borderRadius: 20, backgroundColor: `${colors.sleep}26`, alignItems: "center", justifyContent: "center" },
-  section: { ...font.heading, fontSize: 17, color: colors.text },
-  sectionSub: { ...font.caption, color: colors.textMuted, marginBottom: spacing.md },
 });

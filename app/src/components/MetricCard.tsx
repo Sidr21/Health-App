@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { Card } from "@/components/Card";
 import { Sparkline } from "@/components/Sparkline";
 import { ArrowDownCircle, ArrowUpCircle, CheckCircle, type IconProps } from "@/components/icons";
-import { colors, font, spacing } from "@/theme/tokens";
+import { colors, font, fonts, spacing } from "@/theme/tokens";
 
 export type Tone = "good" | "neutral" | "bad";
 
@@ -20,7 +20,7 @@ interface Props {
   onPress?: () => void;
 }
 
-const toneColor: Record<Tone, string> = { good: colors.recovery, neutral: colors.textMuted, bad: colors.cardio };
+const toneColor: Record<Tone, string> = { good: colors.recovery, neutral: colors.textMuted, bad: colors.recoveryAmber };
 
 /** "♡ Resting HR · 49 bpm · ✓ Normal · sparkline" card from Bevel's Home screen. */
 export function MetricCard({ icon: Icon, title, value, unit, status, series, band, color, onPress }: Props) {
@@ -28,7 +28,7 @@ export function MetricCard({ icon: Icon, title, value, unit, status, series, ban
   return (
     <Card onPress={onPress} style={styles.card}>
       <View style={styles.titleRow}>
-        <Icon size={15} color={colors.textMuted} />
+        <Icon size={13} color={colors.textMuted} />
         <Text style={styles.title}>{title}</Text>
       </View>
       <View style={styles.row}>
@@ -53,10 +53,10 @@ export function MetricCard({ icon: Icon, title, value, unit, status, series, ban
 const styles = StyleSheet.create({
   card: { paddingVertical: 14, paddingHorizontal: spacing.lg },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
-  title: { ...font.label, color: colors.textMuted },
+  title: { ...font.overline, fontSize: 11, color: colors.textMuted },
   row: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   value: { ...font.number, color: colors.text },
-  unit: { fontSize: 16, fontWeight: "500", color: colors.textMuted },
+  unit: { fontSize: 16, fontFamily: fonts.label, color: colors.textMuted },
   statusRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 4 },
   status: { ...font.label },
 });

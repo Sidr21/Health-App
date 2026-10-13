@@ -8,12 +8,12 @@ import { colors } from "@/theme/tokens";
 export type Glow = "none" | "home" | "fitness" | "sleep" | "green" | "amber" | "red";
 
 const GLOWS: Record<Exclude<Glow, "none">, string> = {
-  home: "#2A2B36",
-  fitness: "#7A3E12",
-  sleep: "#4B4FB8",
-  green: "#2E8B57",
-  amber: "#B8860B",
-  red: "#B03A2E",
+  home: "#1E2A4A",
+  fitness: "#1F4F8F",
+  sleep: "#4B3FB8",
+  green: "#1C8C67",
+  amber: "#9C7A16",
+  red: "#A1343A",
 };
 
 export function Backdrop({ glow = "home", height = 520, bg = colors.bg }: { glow?: Glow; height?: number; bg?: string }) {

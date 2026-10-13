@@ -4,9 +4,9 @@ import React, { type ComponentType } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Path, RadialGradient, Rect, Stop } from "react-native-svg";
 
-import { ArrowRight, BoltIcon, CheckCircle, MoonIcon, type IconProps } from "@/components/icons";
-import { Surface } from "@/components/Surface";
-import { colors, font, radius, spacing } from "@/theme/tokens";
+import { ArrowRight, BedIcon, BoltIcon, CheckCircle, MoonIcon, type IconProps } from "@/components/icons";
+import { Surface, type SurfaceTone } from "@/components/Surface";
+import { colors, font, fonts, radius, spacing } from "@/theme/tokens";
 
 function polar(cx: number, cy: number, r: number, deg: number) {
   const a = (deg * Math.PI) / 180;
@@ -33,8 +33,8 @@ export function StressGauge({ value, size = 88 }: { value: number | null; size?:
             <Stop offset="1" stopColor="#FF453A" />
           </LinearGradient>
           <RadialGradient id="stressdisc" cx="35%" cy="30%" r="80%">
-            <Stop offset="0" stopColor="#34353F" />
-            <Stop offset="1" stopColor="#1A1B21" />
+            <Stop offset="0" stopColor="#2A2F3B" />
+            <Stop offset="1" stopColor="#13161D" />
           </RadialGradient>
         </Defs>
         <Circle cx={cx} cy={cy} r={r - 6} fill="url(#stressdisc)" stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
@@ -42,7 +42,7 @@ export function StressGauge({ value, size = 88 }: { value: number | null; size?:
           const o = polar(cx, cy, r + 4, a);
           const inn = polar(cx, cy, r - 1, a);
           const lit = vA != null && a <= vA;
-          return <Path key={i} d={`M${inn.x} ${inn.y} L${o.x} ${o.y}`} stroke={lit ? "url(#stressg)" : colors.hairline} strokeWidth={2} strokeLinecap="round" />;
+          return <Path key={i} d={`M${inn.x} ${inn.y} L${o.x} ${o.y}`} stroke={lit ? "url(#stressg)" : "rgba(255,255,255,0.10)"} strokeWidth={2.2} strokeLinecap="round" opacity={lit ? 1 : 1} />;
         })}
         {m ? <Circle cx={m.x} cy={m.y} r={3.5} fill={colors.text} /> : null}
       </Svg>
@@ -85,6 +85,7 @@ export function StressCard({ avg, min, max, updated, onPress }: { avg: number | 
 
 /** Segmented green bar with a lightning bolt, Bevel's "Energy" row. */
 export function EnergyBar({ pct }: { pct: number | null }) {
+  if (pct == null) return null;
   const n = 48;
   const lit = pct == null ? 0 : Math.round((pct / 100) * n);
   return (
@@ -106,19 +107,17 @@ export function EnergyBar({ pct }: { pct: number | null }) {
   );
 }
 
-/** Vertical pill meter on the right of each Health Monitor tile. */
-function VerticalMeter({ frac, color, height = 72 }: { frac: number | null; color: string; height?: number }) {
-  const w = 10;
-  const fillH = frac == null ? 0 : Math.max(6, Math.min(height - 4, frac * (height - 4)));
+/** Horizontal range bar: track spans min..max, shaded band is your normal range, dot is today. */
+function RangeBar({ v, lo, hi, min, max, color }: { v: number; lo: number; hi: number; min: number; max: number; color: string }) {
+  const w = 132;
+  const h = 14;
+  const x = (n: number) => 4 + ((Math.max(min, Math.min(max, n)) - min) / (max - min || 1)) * (w - 8);
   return (
-    <Svg width={w + 6} height={height}>
-      <Rect x={3} y={0} width={w} height={height} rx={w / 2} fill="rgba(0,0,0,0.35)" stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
-      {frac != null ? (
-        <>
-          <Rect x={3} y={height - fillH} width={w} height={fillH} rx={w / 2} fill={color} opacity={0.9} />
-          <Circle cx={3 + w / 2} cy={height - fillH} r={3} fill={colors.card} stroke={color} strokeWidth={1.5} />
-        </>
-      ) : null}
+    <Svg width={w} height={h} style={{ marginTop: 10 }}>
+      <Rect x={0} y={h / 2 - 2} width={w} height={4} rx={2} fill="rgba(255,255,255,0.08)" />
+      <Rect x={x(lo)} y={h / 2 - 2} width={Math.max(4, x(hi) - x(lo))} height={4} rx={2} fill={color} opacity={0.35} />
+      <Circle cx={x(v)} cy={h / 2} r={6} fill={color} opacity={0.22} />
+      <Circle cx={x(v)} cy={h / 2} r={3.6} fill="#FFFFFF" />
     </Svg>
   );
 }
@@ -129,60 +128,90 @@ export interface MonitorTileProps {
   value: string | null;
   unit?: string;
   status?: string | null;
-  /** 0..1 fill of the meter; null for no data */
-  frac: number | null;
+  /** today's value against the personal normal band, on a min..max track */
+  range?: { v: number; lo: number; hi: number; min: number; max: number } | null;
   color?: string;
   onPress?: () => void;
 }
 
-export function MonitorTile({ icon: Icon, label, value, unit, status, frac, color = colors.recovery, onPress }: MonitorTileProps) {
+export function MonitorTile({ icon: Icon, label, value, unit, status, range, color = colors.recovery, onPress }: MonitorTileProps) {
   const empty = value == null;
   return (
-    <Surface onPress={onPress} style={[styles.card, styles.tile]}>
-      <View style={{ flex: 1 }}>
-        <View style={styles.rowCenter}>
-          <Icon size={14} color={colors.textMuted} />
-          <Text style={styles.tileLabel}>{label}</Text>
-        </View>
-        {empty ? (
-          <Text style={styles.noData}>No{"\n"}data</Text>
-        ) : (
-          <>
-            <Text style={styles.tileValue}>
-              {value}
-              {unit ? <Text style={styles.tileUnit}> {unit}</Text> : null}
-            </Text>
-            {status ? (
-              <View style={styles.rowCenter}>
-                <CheckCircle size={13} color={color} />
-                <Text style={[styles.tileStatus, { color }]}>{status}</Text>
-              </View>
-            ) : null}
-          </>
-        )}
+    <Surface onPress={onPress} style={[styles.card, styles.tile, empty && styles.tileEmpty]}>
+      <View style={styles.rowCenter}>
+        <Icon size={13} color={empty ? colors.textFaint : colors.textMuted} />
+        <Text style={[styles.tileLabel, empty && { color: colors.textFaint }]}>{label}</Text>
       </View>
-      <VerticalMeter frac={empty ? null : frac} color={color} />
+      {empty ? (
+        <Text style={styles.noData}>Not measured</Text>
+      ) : (
+        <>
+          <Text style={styles.tileValue}>
+            {value}
+            {unit ? <Text style={styles.tileUnit}> {unit}</Text> : null}
+          </Text>
+          {status ? (
+            <View style={[styles.rowCenter, { marginTop: 2 }]}>
+              <CheckCircle size={12} color={color} />
+              <Text style={[styles.tileStatus, { color }]}>{status}</Text>
+            </View>
+          ) : null}
+          {range ? <RangeBar {...range} color={color} /> : null}
+        </>
+      )}
     </Surface>
   );
 }
 
-export function TimelineSleepCard({ end, score, asleepS }: { end: string | null; score: number | null; asleepS: number | null }) {
-  const time = end ? new Date(end).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "–";
-  const h = asleepS != null ? `${Math.floor(asleepS / 3600)}h ${Math.round((asleepS % 3600) / 60)}m` : "–";
+function Meta({ icon: Icon, text }: { icon: ComponentType<IconProps>; text: string }) {
   return (
-    <Surface style={styles.card}>
+    <View style={styles.meta}>
+      <Icon size={12} color={colors.textMuted} />
+      <Text style={styles.metaText}>{text}</Text>
+    </View>
+  );
+}
+
+/** Timeline row for the main sleep. Used on Home (with the timeline button) and on the Sleep screen. */
+export function TimelineSleepCard({ end, score, asleepS, tone = "card", button = true }: { end: string | null; score: number | null; asleepS: number | null; tone?: SurfaceTone; button?: boolean }) {
+  const time = end ? new Date(end).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "–";
+  const h = asleepS != null ? `${Math.floor(asleepS / 3600)}h ${String(Math.round((asleepS % 3600) / 60)).padStart(2, "0")}m` : "–";
+  return (
+    <Surface tone={tone} style={styles.card}>
       <Pressable onPress={() => router.push("/sleep/night")} style={styles.rowCenter}>
         <View style={styles.moonWrap}><MoonIcon size={18} color={colors.sleep} /></View>
         <View style={{ flex: 1, marginLeft: 10 }}>
-          <Text style={styles.cardSub}>{time}</Text>
+          <Text style={styles.metaText}>Woke {time}</Text>
           <Text style={styles.cardTitle}>Primary sleep</Text>
-          <Text style={styles.cardSub}>{score != null ? `◑ ${Math.round(score)}%` : "◑ –"}   🛏 {h}</Text>
+          <View style={[styles.rowCenter, { gap: 14, marginTop: 4 }]}>
+            <Meta icon={MoonIcon} text={score != null ? `${Math.round(score)}%` : "–"} />
+            <Meta icon={BedIcon} text={h} />
+          </View>
         </View>
         <ArrowRight size={16} color={colors.textMuted} />
       </Pressable>
-      <Pressable onPress={() => router.push("/sleep")} style={styles.button}>
-        <Text style={styles.buttonText}>View timeline</Text>
-      </Pressable>
+      {button ? (
+        <Pressable onPress={() => router.push("/sleep")} style={styles.button}>
+          <Text style={styles.buttonText}>View timeline</Text>
+        </Pressable>
+      ) : null}
+    </Surface>
+  );
+}
+
+/** One compact line for metrics the current sources don't provide, instead of a grid of empty tiles. */
+export function NotTrackedRow({ items }: { items: { icon: ComponentType<IconProps>; label: string }[] }) {
+  return (
+    <Surface style={[styles.card, styles.notTracked]}>
+      <Text style={styles.notTrackedLabel}>Not tracked yet</Text>
+      <View style={[styles.rowCenter, { gap: 14, flexWrap: "wrap" }]}>
+        {items.map(({ icon: Icon, label }) => (
+          <View key={label} style={styles.meta}>
+            <Icon size={12} color={colors.textFaint} />
+            <Text style={[styles.metaText, { color: colors.textFaint }]}>{label}</Text>
+          </View>
+        ))}
+      </View>
     </Surface>
   );
 }
@@ -205,19 +234,24 @@ const styles = StyleSheet.create({
   cardSub: { ...font.caption, color: colors.textMuted, marginTop: 2 },
   statRow: { flexDirection: "row", alignItems: "center", marginTop: 14 },
   statCell: { flex: 1 },
-  statValue: { ...font.heading, color: colors.textMuted },
-  statLabel: { ...font.caption, color: colors.textFaint, marginTop: 2 },
+  statValue: { fontFamily: fonts.numeral, fontSize: 22, color: colors.text },
+  statLabel: { ...font.overline, fontSize: 10, color: colors.textFaint, marginTop: 2 },
   vline: { width: StyleSheet.hairlineWidth, height: 28, backgroundColor: colors.hairline, marginRight: 10 },
   arrow: { position: "absolute", top: 14, right: 14 },
-  gaugeValue: { textAlign: "center", color: colors.text, fontSize: 18, fontWeight: "600" },
+  gaugeValue: { textAlign: "center", color: colors.text, fontSize: 22, fontFamily: fonts.numeral },
   energy: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12 },
   energyValue: { ...font.heading, fontSize: 15, color: colors.text, minWidth: 44, textAlign: "right" },
-  tile: { width: "48%", flexDirection: "row", alignItems: "center", minHeight: 104, padding: 14 },
-  tileLabel: { ...font.label, color: colors.textMuted },
-  tileValue: { ...font.number, fontSize: 24, color: colors.text, marginTop: 6 },
-  tileUnit: { fontSize: 14, color: colors.textMuted, fontWeight: "500" },
-  tileStatus: { ...font.label, fontSize: 14 },
-  noData: { fontSize: 22, fontWeight: "600", color: colors.textFaint, marginTop: 6, lineHeight: 26 },
+  tile: { width: "48.5%", minHeight: 112, padding: 14, marginBottom: 10 },
+  tileEmpty: { minHeight: 0, opacity: 0.7 },
+  tileLabel: { ...font.overline, fontSize: 11, color: colors.textMuted },
+  tileValue: { ...font.number, fontSize: 28, color: colors.text, marginTop: 6 },
+  tileUnit: { fontSize: 13, color: colors.textMuted, fontFamily: undefined, fontWeight: "500" },
+  tileStatus: { ...font.label, fontSize: 13 },
+  noData: { ...font.caption, color: colors.textFaint, marginTop: 8 },
+  meta: { flexDirection: "row", alignItems: "center", gap: 5 },
+  metaText: { ...font.caption, color: colors.textMuted },
+  notTracked: { paddingVertical: 12, gap: 6 },
+  notTrackedLabel: { ...font.overline, fontSize: 10, color: colors.textFaint },
   moonWrap: { width: 40, height: 40, borderRadius: 20, backgroundColor: `${colors.sleep}26`, alignItems: "center", justifyContent: "center" },
   button: { marginTop: spacing.md, backgroundColor: "rgba(255,255,255,0.08)", borderRadius: radius.sm, paddingVertical: 12, alignItems: "center", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.08)" },
   buttonText: { ...font.heading, fontSize: 15, color: colors.text },
