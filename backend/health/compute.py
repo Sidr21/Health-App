@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import statistics
 from datetime import date, datetime, timedelta
 
@@ -19,7 +20,8 @@ HISTORY_DAYS = 60
 
 
 def _minutes_of_day(ts: datetime) -> float:
-    return ts.hour * 60 + ts.minute
+    """Minutes since noon, so bed/wake times around midnight do not straddle a wrap point."""
+    return (ts.hour * 60 + ts.minute - 720) % 1440
 
 
 def _dev_minutes(value: float | None, ref: list[float]) -> float | None:
@@ -69,6 +71,10 @@ def compute_day(s: Session, d: date) -> dict[str, float | None]:
     def hrv_for(day: date) -> float | None:
         pts = by_day.get(day)
         if not pts:
+            # no raw samples stored for this night: fall back to COROS's nightly average
+            d_row = dailies.get(day)
+            if d_row is not None and d_row.coros_hrv_avg:
+                return math.log(d_row.coros_hrv_avg)
             return None
         sl = sleeps.get(day)
         window = None
@@ -85,8 +91,6 @@ def compute_day(s: Session, d: date) -> dict[str, float | None]:
     shr_base = rolling_baseline(shr_series, 28)
 
     out: dict[str, float | None] = {"ln_rmssd": ln_series[-1], "rhr": rhr_series[-1]}
-    import math
-
     out["hrv_ms"] = round(math.exp(ln_series[-1]), 1) if ln_series[-1] is not None else None
 
     sl = sleeps.get(d)

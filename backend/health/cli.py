@@ -104,7 +104,7 @@ def compute(days: int = 30) -> None:
 
 
 @app.command()
-def show(day: str = "today") -> None:
+def show(day: str = typer.Argument("today")) -> None:
     """Print one day as the API returns it."""
     from health.api.main import _day_payload
     from health.db import init_db, session_scope

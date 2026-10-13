@@ -103,6 +103,7 @@ class Daily(Base):
     avg_hr: Mapped[int | None] = mapped_column(Integer)
     rhr: Mapped[int | None] = mapped_column(Integer)
     stress_avg: Mapped[int | None] = mapped_column(Integer)
+    coros_hrv_avg: Mapped[int | None] = mapped_column(Integer)  # COROS nightly avg, fallback
     coros_recovery_pct: Mapped[int | None] = mapped_column(Integer)
     coros_stl: Mapped[float | None] = mapped_column(Float)
     coros_ltl: Mapped[float | None] = mapped_column(Float)

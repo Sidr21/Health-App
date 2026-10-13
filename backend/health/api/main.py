@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from datetime import date, timedelta
 
 from fastapi import Depends, FastAPI, Query
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -21,6 +22,8 @@ async def _lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Health App API", version=__version__, lifespan=_lifespan)
+# The native app does not need CORS; the Expo web preview does. Auth is the bearer token.
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
 @app.get("/health")

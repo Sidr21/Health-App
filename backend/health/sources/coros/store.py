@@ -229,6 +229,7 @@ def store_sleep_hrv(s: Session, rep: p.SleepHrvReport) -> int:
         n += 1
     for a in rep.assessments:
         row = _get_daily(s, a.date)
+        row.coros_hrv_avg = a.avg_ms if a.avg_ms is not None else row.coros_hrv_avg
         raw = dict(row.raw_json or {})
         raw["coros_hrv"] = a.__dict__ | {"date": a.date.isoformat()}
         row.raw_json = raw

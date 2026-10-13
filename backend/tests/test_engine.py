@@ -114,3 +114,16 @@ def test_recovery_calibrating_and_missing():
         RecoveryInputs(None, Baseline(None, None, 0), None, Baseline(None, None, 0), 80)
     )
     assert none.score is None
+
+
+def test_minutes_of_day_wraps_at_noon():
+    from datetime import datetime
+
+    from health.compute import _dev_minutes, _minutes_of_day
+
+    bed_2351 = _minutes_of_day(datetime(2026, 10, 12, 23, 51))
+    ref = [
+        _minutes_of_day(datetime(2026, 10, 1, h, m))
+        for h, m in [(0, 35), (23, 27), (0, 58), (1, 2)]
+    ]
+    assert _dev_minutes(bed_2351, ref) < 60
