@@ -487,6 +487,17 @@ Out of scope but visible in Bevel, kept as later options: nutrition (ref 05), he
 
 ---
 
+### 7.1 Implementation status of the detail screens (October 2026)
+
+- **Workout detail** (`app/workout/[id]`, `GET /activities/{id}`): stats grid, COROS load dial, heart-rate chart with zone bands, zones, cardio focus, HR recovery, pace, laps, muscles worked, "COROS says". Zones use %HRmax (Z1 < 60, Z2 60–70, Z3 70–80, Z4 80–90, Z5 ≥ 90) until LTHR lands. HRmax = set value, else the higher of the highest recorded HR and 208 − 0.7 × age. Time in zone comes from the FIT stream when stored, otherwise from lap averages (labelled "estimated from laps"). HR recovery needs the stream and a recorded minute after the effort.
+- **FIT files**: `health coros sync` downloads up to `--fit-limit` new files per run via `queryActivityFitFileDownloadUrls` (from `s3.coros.com`, which the cloud session's proxy blocks; it works on the Mac). `health fit FILE --label-id ID` imports one by hand. Raw files are kept under `data/raw/fit/`.
+- **Sleep stages** (Primary sleep screen): COROS only reports stage totals, so the hypnogram comes from Apple Health sleep analysis (`sleep_segments`, synced by the iPhone app). Without it the screen shows the stage composition with typical ranges.
+- **Journal** saves through `PUT/DELETE /journal`; **Insights** (`/journal/insights`) compares the next wake-up day's recovery, sleep score, HRV and resting HR after yes vs no days (median split for amounts), Welch z, minimum 5 days each side, sample sizes always shown.
+- **Body** (Biology tab + `body/[metric]`): weight, BMI (scale value or weight/height²), body fat, lean mass, with 30D/90D/1Y charts and readings.
+- **Settings**: HRmax override (field test) or estimate, profile, sleep need, units (imperial/metric, applied app-wide), data-source freshness, Apple Health connect.
+- **Fitness models**: HRmax live; VO₂max, threshold and race predictions show COROS's values with ours marked as waiting for FIT streams.
+- **Dev gallery** (`/dev/gallery`, development builds only): the hypnogram and per-second HR chart with clearly labelled synthetic data, for previewing without phone data.
+
 ## 8. Build plan
 
 Each phase ends with something usable and a short writeup. Estimates assume part-time work with Claude doing most of the typing.
@@ -518,9 +529,9 @@ Suggested first session after this doc is approved: phase 0 + the MCP-client spi
 
 ## 10. Open items (need your input)
 
-Decided so far: React Native / Expo client · cloud-hosted backend · scale writes to Apple Health · Bevel reference screens filed (marketing site + in-app).
+Decided so far: Mac + free Apple ID · React Native / Expo client · cloud-hosted backend · scale writes to Apple Health · Bevel reference screens filed (marketing site + in-app).
 
-1. **Mac with Xcode?** Decides free vs paid Apple path (4.1). No Mac → the $99/yr program plus EAS is required.
+1. ~~Mac with Xcode?~~ Yes: free Apple ID path (4.1).
 2. **HRmax**: field test is in your COROS workout library (`docs/engine/hrmax-test.md`); tell me a date to schedule it. Any recent race results (date, distance, time) to validate VO2max against?
 3. **Units**: the Bevel screenshots show miles and °F; COROS reports km. Default to **miles / °F** in the UI with km stored internally? (Say "km" if you prefer.)
 4. **Journal tags**: which of Bevel's do you actually use (added sugar, caffeine, mood, hydration, keto, low carbs, …), and what else should be in the list?

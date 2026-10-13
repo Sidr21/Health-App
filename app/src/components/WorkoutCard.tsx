@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
@@ -30,7 +31,7 @@ export function WorkoutCard({ a }: { a: Activity }) {
   const time = new Date(a.start).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   const strainPct = a.coros_training_load != null ? Math.min(100, Math.round((a.coros_training_load / 200) * 100)) : null;
   return (
-    <Card style={styles.card}>
+    <Card style={styles.card} onPress={() => router.push(`/workout/${a.id}`)}>
       <View style={styles.row}>
         <View style={[styles.iconWrap, { backgroundColor: `${meta.color}26` }]}>
           <meta.Icon size={24} color={meta.color} />

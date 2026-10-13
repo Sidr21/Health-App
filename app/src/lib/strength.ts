@@ -1,18 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { api, type MuscleId, type MuscleStateOut, type MuscleStatus } from "./api";
+import { weightUnit } from "./units";
 import { todayIso } from "./useDays";
 import { colors } from "@/theme/tokens";
 
 export const KG_PER_LB = 0.45359237;
-/** Display unit for loads. The backend stores kilograms. */
-export const WEIGHT_UNIT: "lb" | "kg" = "lb";
-
-export function toUnit(kg: number, unit = WEIGHT_UNIT): number {
+export function toUnit(kg: number, unit = weightUnit()): number {
   return unit === "lb" ? kg / KG_PER_LB : kg;
 }
 
-export function weight(kg: number | null | undefined, unit = WEIGHT_UNIT): string {
+export function weight(kg: number | null | undefined, unit = weightUnit()): string {
   if (kg == null) return "–";
   const v = toUnit(kg, unit);
   return `${(v >= 100 ? Math.round(v) : Math.round(v * 10) / 10).toLocaleString()} ${unit}`;

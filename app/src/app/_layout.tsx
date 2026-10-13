@@ -3,16 +3,27 @@ import {
   BarlowSemiCondensed_700Bold,
   useFonts,
 } from "@expo-google-fonts/barlow-semi-condensed";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { api } from "@/lib/api";
 import { watchHealthKit } from "@/lib/healthkit";
+import { setUnits } from "@/lib/units";
 import { queryClient } from "@/lib/query";
 import { colors } from "@/theme/tokens";
+
+/** Applies the backend's unit preference (imperial / metric) app-wide. */
+function UnitsSync() {
+  const q = useQuery({ queryKey: ["settings"], queryFn: api.settings, staleTime: 5 * 60_000 });
+  useEffect(() => {
+    if (q.data) setUnits(q.data.units);
+  }, [q.data]);
+  return null;
+}
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({ BarlowSemiCondensed_600SemiBold, BarlowSemiCondensed_700Bold });
@@ -27,6 +38,7 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <StatusBar style="light" />
+          <UnitsSync />
           <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="sleep/index" />
@@ -35,6 +47,10 @@ export default function RootLayout() {
             <Stack.Screen name="settings" options={{ presentation: "modal" }} />
             <Stack.Screen name="muscles" options={{ presentation: "modal" }} />
             <Stack.Screen name="strength/log" options={{ presentation: "modal" }} />
+            <Stack.Screen name="workout/[id]" options={{ presentation: "modal" }} />
+            <Stack.Screen name="journal/insights" />
+            <Stack.Screen name="body/[metric]" />
+            <Stack.Screen name="fitness-models" />
           </Stack>
         </QueryClientProvider>
       </SafeAreaProvider>

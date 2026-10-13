@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Card } from "@/components/Card";
 import { Gauge } from "@/components/Gauge";
 import { Header, RoundButton } from "@/components/Header";
-import { CalendarIcon, DotsIcon, PlusIcon, ZzzIcon } from "@/components/icons";
+import { ArrowRight, CalendarIcon, DotsIcon, PlusIcon, ZzzIcon } from "@/components/icons";
 import { Screen } from "@/components/Screen";
 import { SectionLabel } from "@/components/SectionLabel";
 import { WeekStrip, type WeekDay } from "@/components/WeekStrip";
@@ -119,6 +119,17 @@ export default function FitnessScreen() {
         </Card>
       </View>
 
+      <SectionLabel title="Fitness models" />
+      <Card onPress={() => router.push("/fitness-models")}>
+        <View style={styles.modelsRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cardTitle}>VO₂max · threshold · HRmax · race times</Text>
+            <Text style={styles.cardSub}>Our estimates next to COROS&apos;s. HRmax and zones are live; VO₂max and threshold need FIT streams.</Text>
+          </View>
+          <ArrowRight size={16} color={colors.textMuted} />
+        </View>
+      </Card>
+
       <SectionLabel
         title="Strength"
         action={
@@ -169,6 +180,7 @@ const styles = StyleSheet.create({
   cardPending: { ...font.heading, fontSize: 15, color: colors.textMuted, marginTop: 10 },
   cardSub: { ...font.caption, color: colors.textFaint, marginTop: 4 },
   emptyTitle: { ...font.heading, fontSize: 15, color: colors.text },
+  modelsRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   logBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.08)" },
   logText: { ...font.label, color: colors.text },
 });

@@ -1,3 +1,5 @@
+import { useQuery } from "@tanstack/react-query";
+import { router } from "expo-router";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
@@ -7,9 +9,12 @@ import { DotsIcon } from "@/components/icons";
 import { Screen } from "@/components/Screen";
 import { SectionLabel } from "@/components/SectionLabel";
 import { Sparkline } from "@/components/Sparkline";
+import { Surface } from "@/components/Surface";
+import { api } from "@/lib/api";
+import { bmiCategory, bodyDelta, bodyValue, displaySeries, type BodyKey } from "@/lib/body";
 import { hms } from "@/lib/format";
 import { useDays } from "@/lib/useDays";
-import { colors, font, fonts } from "@/theme/tokens";
+import { colors, font, fonts, spacing } from "@/theme/tokens";
 
 function Tile({ title, value, unit, series, color, sub }: { title: string; value: string; unit?: string; series: (number | null)[]; color: string; sub?: string }) {
   return (
@@ -31,6 +36,7 @@ export default function BiologyScreen() {
   const q = useDays(28);
   const latest = q.days[q.days.length - 1];
   const comps = (latest?.scores.recovery?.components ?? {}) as { hrv_ms?: number };
+  const body = useQuery({ queryKey: ["body"], queryFn: () => api.bodySummary(365) });
   return (
     <Screen refreshing={q.isFetching} onRefresh={() => q.refetch()}>
       <Header centered title="Biology" left={<View style={{ width: 44 }} />} right={<RoundButton><DotsIcon size={20} color={colors.text} /></RoundButton>} />
@@ -43,10 +49,34 @@ export default function BiologyScreen() {
         <Tile title="Time asleep" value={hms(latest?.sleep?.asleep_s)} series={q.days.map((d) => (d.sleep?.asleep_s != null ? d.sleep.asleep_s / 3600 : null))} color={colors.sleepDeep} />
         <Tile title="Steps" value={latest?.daily.steps != null ? latest.daily.steps.toLocaleString() : "–"} series={q.days.map((d) => d.daily.steps)} color={colors.energy} />
       </View>
-      <SectionLabel title="Body" />
-      <Card>
-        <Text style={styles.body}>Weight, BMI and body fat appear here once Apple Health is connected on the native build.</Text>
-      </Card>
+      <SectionLabel title="Body" note={body.data?.metrics.weight_kg.latest ? `latest ${new Date(`${body.data.metrics.weight_kg.latest.date}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : undefined} />
+      <View style={styles.grid}>
+        {(["weight_kg", "bmi", "body_fat_pct", "lean_mass_kg"] as BodyKey[]).map((k) => {
+          const m = body.data?.metrics[k];
+          const v = bodyValue(k, m?.latest?.value);
+          const sub = k === "bmi" ? bmiCategory(m?.latest?.value) : bodyDelta(k, m?.change_30d);
+          return (
+            <Surface key={k} style={[styles.half, styles.bodyTile]} onPress={() => router.push({ pathname: "/body/[metric]", params: { metric: k } })}>
+              <Text style={styles.tileTitle}>{m?.label ?? k}</Text>
+              {m?.latest ? (
+                <>
+                  <Text style={styles.tileValue}>{v.value}{v.unit ? <Text style={styles.tileUnit}> {v.unit}</Text> : null}</Text>
+                  {sub ? <Text style={styles.tileSub}>{sub}</Text> : null}
+                  {m.series.length > 1 ? (
+                    <View style={{ marginTop: 8 }}>
+                      <Sparkline values={displaySeries(k, m)} color={colors.sleepRem} width={130} height={34} />
+                    </View>
+                  ) : (
+                    <Text style={[styles.tileSub, { marginTop: 8 }]}>{m.latest.source === "computed" ? "From weight and height" : `1 reading · ${m.latest.source.replace("apple:", "")}`}</Text>
+                  )}
+                </>
+              ) : (
+                <Text style={styles.empty}>From your scale via Apple Health</Text>
+              )}
+            </Surface>
+          );
+        })}
+      </View>
       <SectionLabel title="Biological age" />
       <Card>
         <Text style={styles.body}>Weekly, from VO₂max, resting HR, HRV, body composition, sleep and activity (DESIGN §6.8). Needs the fitness models from phase 3.</Text>
@@ -63,4 +93,6 @@ const styles = StyleSheet.create({
   tileUnit: { fontSize: 13, color: colors.textMuted, fontFamily: fonts.label },
   tileSub: { ...font.caption, color: colors.textFaint },
   body: { ...font.body, color: colors.textMuted, lineHeight: 21 },
+  bodyTile: { minHeight: 128, marginBottom: spacing.md },
+  empty: { ...font.caption, color: colors.textFaint, marginTop: 10, lineHeight: 17 },
 });

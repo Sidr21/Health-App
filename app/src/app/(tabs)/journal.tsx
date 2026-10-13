@@ -1,36 +1,20 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { router } from "expo-router";
 import React, { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { Header, RoundButton } from "@/components/Header";
-import { ArrowRight, CheckCircle, DotsIcon, SparkleIcon } from "@/components/icons";
+import { CheckCircle, DotsIcon, SparkleIcon } from "@/components/icons";
 import { Screen } from "@/components/Screen";
 import { Surface } from "@/components/Surface";
 import { WeekStrip, type WeekDay } from "@/components/WeekStrip";
+import { api } from "@/lib/api";
 import { dayOfMonth, monthLabel, weekOf } from "@/lib/dates";
+import { TAGS, type TagDef } from "@/lib/journal";
 import { todayIso } from "@/lib/useDays";
-import { colors, font, spacing } from "@/theme/tokens";
+import { colors, font, fonts, spacing } from "@/theme/tokens";
 
 type Tri = "no" | "skip" | "yes" | null;
-
-interface Entry {
-  key: string;
-  emoji: string;
-  label: string;
-  kind: "tri" | "number";
-  unit?: string;
-}
-
-const DAYTIME: Entry[] = [
-  { key: "sugar", emoji: "🍬", label: "Added sugar", kind: "tri" },
-  { key: "caffeine", emoji: "☕", label: "Caffeine", kind: "number", unit: "mg" },
-  { key: "mood", emoji: "😊", label: "Daily mood", kind: "number" },
-  { key: "hydration", emoji: "💧", label: "Hydration", kind: "number", unit: "fl oz" },
-];
-const NIGHTTIME: Entry[] = [
-  { key: "alcohol", emoji: "🍷", label: "Alcohol", kind: "tri" },
-  { key: "late_meal", emoji: "🍽️", label: "Late meal", kind: "tri" },
-  { key: "screens", emoji: "📱", label: "Screens in bed", kind: "tri" },
-];
 
 function TriToggle({ value, onChange }: { value: Tri; onChange: (v: Tri) => void }) {
   const opts: { v: Tri; glyph: string }[] = [
@@ -49,18 +33,40 @@ function TriToggle({ value, onChange }: { value: Tri; onChange: (v: Tri) => void
   );
 }
 
-function EntryRow({ e, value, onChange }: { e: Entry; value: Tri | number | null; onChange: (v: Tri) => void }) {
+function NumberField({ e, value, onCommit }: { e: TagDef; value: number | null; onCommit: (v: number | null) => void }) {
+  // remounted (via key) whenever the stored value changes, so no syncing effect is needed
+  const [text, setText] = useState(value == null ? "" : String(value));
+  const commit = () => {
+    const v = text.trim() === "" ? null : Number(text);
+    if (v !== value && (v == null || isFinite(v))) onCommit(v);
+  };
+  return (
+    <View style={styles.numRight}>
+      <TextInput
+        value={text}
+        onChangeText={(t) => setText(t.replace(/[^0-9.]/g, ""))}
+        onBlur={commit}
+        onSubmitEditing={commit}
+        keyboardType="decimal-pad"
+        placeholder={e.placeholder ?? "–"}
+        placeholderTextColor={colors.textFaint}
+        style={styles.numInput}
+      />
+      {e.unit ? <Text style={styles.numUnit}>{e.unit}</Text> : null}
+    </View>
+  );
+}
+
+function EntryRow({ e, value, onChange }: { e: TagDef; value: number | null; onChange: (v: number | null) => void }) {
+  const tri: Tri = value == null ? null : value >= 1 ? "yes" : "no";
   return (
     <Surface style={styles.entry}>
       <Text style={styles.emoji}>{e.emoji}</Text>
       <Text style={styles.entryLabel}>{e.label}</Text>
       {e.kind === "tri" ? (
-        <TriToggle value={(value as Tri) ?? null} onChange={onChange} />
+        <TriToggle value={tri} onChange={(v) => onChange(v === "yes" ? 1 : v === "no" ? 0 : null)} />
       ) : (
-        <View style={styles.numRight}>
-          <Text style={styles.numValue}>{value == null ? "–" : String(value)}{e.unit ? ` ${e.unit}` : ""}</Text>
-          <View style={styles.arrowBtn}><ArrowRight size={16} color={colors.textMuted} /></View>
-        </View>
+        <NumberField key={String(value)} e={e} value={value} onCommit={onChange} />
       )}
     </Surface>
   );
@@ -68,26 +74,36 @@ function EntryRow({ e, value, onChange }: { e: Entry; value: Tri | number | null
 
 export default function JournalScreen() {
   const today = todayIso();
+  const qc = useQueryClient();
   const [selected, setSelected] = useState(today);
-  // Keyed by date then entry; device-local until the journal API lands (phase 5).
-  const [entries, setEntries] = useState<Record<string, Record<string, Tri | number | null>>>({});
-  const values = entries[selected] ?? {};
-  const setValues = (fn: (s: Record<string, Tri | number | null>) => Record<string, Tri | number | null>) =>
-    setEntries((all) => ({ ...all, [selected]: fn(all[selected] ?? {}) }));
   const week = weekOf(selected);
-  const hasEntries = (iso: string) => Object.values(entries[iso] ?? {}).some((v) => v != null);
+  const q = useQuery({ queryKey: ["journal", week[0], week[6]], queryFn: () => api.journal(week[0], week[6]) });
+  const byDay: Record<string, Record<string, number | null>> = {};
+  for (const r of q.data ?? []) (byDay[r.date] ??= {})[r.tag] = r.value;
+  const values = byDay[selected] ?? {};
+  const save = useMutation({
+    mutationFn: async ({ tag, value }: { tag: string; value: number | null }) => {
+      if (value == null) await api.deleteJournal(selected, tag);
+      else await api.putJournal({ date: selected, tag, value });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["journal"] });
+      qc.invalidateQueries({ queryKey: ["insights"] });
+    },
+  });
   const days: WeekDay[] = week.map((iso) => ({
     iso,
     weekday: "",
     day: dayOfMonth(iso),
-    badge: hasEntries(iso) ? <CheckCircle size={20} color={colors.gold} /> : null,
+    badge: Object.keys(byDay[iso] ?? {}).length ? <CheckCircle size={20} color={colors.gold} /> : null,
     dim: iso > today,
   }));
+  const logged = Object.keys(values).length;
 
   return (
-    <Screen>
+    <Screen refreshing={q.isFetching} onRefresh={() => q.refetch()}>
       <View style={styles.topRow}>
-        <Pressable style={styles.insights}>
+        <Pressable style={styles.insights} onPress={() => router.push("/journal/insights")}>
           <SparkleIcon size={16} color={colors.text} />
           <Text style={styles.insightsText}>Insights</Text>
         </Pressable>
@@ -100,20 +116,24 @@ export default function JournalScreen() {
         ))}
       </View>
       <View style={styles.hairline} />
-      <WeekStrip days={days} selected={selected} onSelect={setSelected} variant="circles" />
+      <WeekStrip days={days} selected={selected} onSelect={(iso) => iso <= today && setSelected(iso)} variant="circles" />
 
-      <Text style={styles.section}>{selected === today ? "Today's Entries" : `Entries for ${selected}`}</Text>
-      <Text style={styles.sectionSub}>Your entries today will contribute to the 90-day rolling data for tomorrow&apos;s insights.</Text>
+      <Text style={styles.section}>{selected === today ? "Today's entries" : `Entries for ${new Date(`${selected}T00:00:00`).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}`}</Text>
+      <Text style={styles.sectionSub}>
+        {logged ? `${logged} logged. ` : ""}Each entry is compared with the next morning&apos;s recovery, sleep, HRV and resting HR.
+      </Text>
 
       <Text style={styles.group}>Daytime</Text>
-      {DAYTIME.map((e) => (
-        <EntryRow key={e.key} e={e} value={values[e.key] ?? null} onChange={(v) => setValues((s) => ({ ...s, [e.key]: v }))} />
+      {TAGS.filter((t) => t.group === "day").map((e) => (
+        <EntryRow key={`${selected}-${e.key}`} e={e} value={values[e.key] ?? null} onChange={(v) => save.mutate({ tag: e.key, value: v })} />
       ))}
       <Text style={styles.group}>Nighttime</Text>
-      {NIGHTTIME.map((e) => (
-        <EntryRow key={e.key} e={e} value={values[e.key] ?? null} onChange={(v) => setValues((s) => ({ ...s, [e.key]: v }))} />
+      {TAGS.filter((t) => t.group === "night").map((e) => (
+        <EntryRow key={`${selected}-${e.key}`} e={e} value={values[e.key] ?? null} onChange={(v) => save.mutate({ tag: e.key, value: v })} />
       ))}
-      <Text style={styles.footnote}>Entries are kept on this device until the journal API lands (phase 5).</Text>
+      <Text style={styles.footnote}>
+        {save.isError ? `Could not save: ${String(save.error)}` : q.isError ? `Cannot reach the backend (${String(q.error)})` : "Saved to your backend as you tap. ✕ = no, ✓ = yes, — clears the entry."}
+      </Text>
     </Screen>
   );
 }
@@ -136,7 +156,7 @@ const styles = StyleSheet.create({
   triActive: { backgroundColor: colors.cardRaised },
   triText: { ...font.heading, color: colors.textFaint },
   numRight: { flexDirection: "row", alignItems: "center", gap: 10 },
-  numValue: { ...font.body, color: colors.textMuted },
-  arrowBtn: { width: 38, height: 38, borderRadius: 12, borderWidth: 1, borderColor: colors.hairline, alignItems: "center", justifyContent: "center" },
+  numInput: { width: 76, height: 38, borderRadius: 12, borderWidth: 1, borderColor: colors.hairline, color: colors.text, textAlign: "center", fontFamily: fonts.numeral, fontSize: 17, backgroundColor: "rgba(0,0,0,0.25)" },
+  numUnit: { ...font.caption, color: colors.textMuted, width: 34 },
   footnote: { ...font.caption, color: colors.textFaint, marginTop: spacing.md },
 });
