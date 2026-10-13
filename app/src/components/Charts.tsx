@@ -30,6 +30,7 @@ export function LineChart({
   marker,
   dots = false,
   step = false,
+  robust = false,
   id = "lc",
 }: {
   points: { x: number; y: number | null }[];
@@ -42,6 +43,8 @@ export function LineChart({
   dots?: boolean;
   /** draw as steps (lap averages) rather than a smooth line */
   step?: boolean;
+  /** scale the y axis to the 2nd–98th percentile so a stop or a GPS glitch can't flatten the curve */
+  robust?: boolean;
   id?: string;
 }) {
   const [w, onLayout] = useWidth();
@@ -52,8 +55,10 @@ export function LineChart({
   const bottom = 18;
   const plotW = Math.max(10, w - left - 4);
   const plotH = height - top - bottom;
-  let lo = Math.min(...ys);
-  let hi = Math.max(...ys);
+  const sorted = [...ys].sort((a, b) => a - b);
+  const q = (f: number) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.round(f * (sorted.length - 1))))];
+  let lo = robust ? q(0.02) : sorted[0];
+  let hi = robust ? q(0.98) : sorted[sorted.length - 1];
   const pad = Math.max(1, (hi - lo) * 0.12);
   lo -= pad;
   hi += pad;
@@ -64,23 +69,31 @@ export function LineChart({
   const X = (x: number) => (x1 === x0 ? left + plotW / 2 : left + ((x - x0) / (x1 - x0)) * plotW);
   const Y = (y: number) => top + (1 - (y - lo) / (hi - lo || 1)) * plotH;
 
-  let d = "";
-  let pen = false;
-  let lastY = 0;
+  // one sub-path per contiguous run of values; gaps (pauses) break the line and the fill
+  const clampY = (y: number) => Math.max(lo, Math.min(hi, y));
+  const runs: { x: number; y: number }[][] = [];
+  let cur: { x: number; y: number }[] = [];
   for (const p of points) {
     if (p.y == null) {
-      pen = false;
+      if (cur.length) runs.push(cur);
+      cur = [];
       continue;
     }
-    if (!pen) d += `M${X(p.x).toFixed(1)} ${Y(p.y).toFixed(1)}`;
-    else if (step) d += `L${X(p.x).toFixed(1)} ${Y(lastY).toFixed(1)}L${X(p.x).toFixed(1)} ${Y(p.y).toFixed(1)}`;
-    else d += `L${X(p.x).toFixed(1)} ${Y(p.y).toFixed(1)}`;
-    pen = true;
-    lastY = p.y;
+    cur.push({ x: p.x, y: clampY(p.y) });
   }
-  const firstX = X(points.find((p) => p.y != null)!.x);
-  const lastPt = [...points].reverse().find((p) => p.y != null)!;
-  const area = `${d}L${X(lastPt.x).toFixed(1)} ${top + plotH}L${firstX.toFixed(1)} ${top + plotH}Z`;
+  if (cur.length) runs.push(cur);
+  let d = "";
+  let area = "";
+  for (const run of runs) {
+    let seg = "";
+    run.forEach((p, i) => {
+      if (i === 0) seg += `M${X(p.x).toFixed(1)} ${Y(p.y).toFixed(1)}`;
+      else if (step) seg += `L${X(p.x).toFixed(1)} ${Y(run[i - 1].y).toFixed(1)}L${X(p.x).toFixed(1)} ${Y(p.y).toFixed(1)}`;
+      else seg += `L${X(p.x).toFixed(1)} ${Y(p.y).toFixed(1)}`;
+    });
+    d += seg;
+    area += `${seg}L${X(run[run.length - 1].x).toFixed(1)} ${top + plotH}L${X(run[0].x).toFixed(1)} ${top + plotH}Z`;
+  }
   const ticks = [hi - pad, (hi + lo) / 2, lo + pad];
 
   return (
@@ -104,7 +117,7 @@ export function LineChart({
         <Path d={area} fill={`url(#${id}-fill)`} />
         <Path d={d} stroke={color} strokeWidth={2} fill="none" strokeLinejoin="round" strokeLinecap="round" />
         {dots
-          ? points.map((p, i) => (p.y != null ? <Circle key={i} cx={X(p.x)} cy={Y(p.y)} r={3.2} fill={color} /> : null))
+          ? points.map((p, i) => (p.y != null ? <Circle key={i} cx={X(p.x)} cy={Y(clampY(p.y))} r={3.2} fill={color} /> : null))
           : null}
         {marker ? <Line x1={X(marker.x)} x2={X(marker.x)} y1={top} y2={top + plotH} stroke={colors.text} strokeOpacity={0.5} strokeDasharray="2 3" /> : null}
       </Svg>

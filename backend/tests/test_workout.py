@@ -114,3 +114,46 @@ def test_workout_detail_endpoint_laps_then_stream(fixture_text):
     assert j["zones"]["method"] == "stream" and j["hr_recovery"]["drop_bpm"] > 20
     assert j["stream"]["n"] == 720 and len(j["stream"]["points"]) == 300
     assert sum(z["seconds"] for z in j["zones"]["zones"]) == pytest.approx(719, abs=2)
+
+
+def test_running_cadence_doubled_and_laps_parsed():
+    parsed = parse_fit(synthetic_run(START, minutes=10, cooldown_s=0, running=True))
+    assert parsed.sport == "running"
+    assert parsed.samples[0]["cadence"] == 164  # 82 strides/min per leg -> steps/min
+    assert [lap["avg_hr"] for lap in parsed.laps] == [140, 165]
+    assert parsed.laps[1]["avg_cadence"] == 168 and parsed.laps[0]["timer_s"] == 300
+
+
+def test_hr_recovery_ignores_drops_across_a_pause():
+    paused = parse_fit(synthetic_run(START, minutes=10, cooldown_s=120, pause_at=600))
+    stream = [(x["t_offset_s"], x["hr"]) for x in paused.samples]
+    assert hr_recovery(stream, 190) is None
+
+
+@pytest.mark.usefixtures("tmp_db")
+def test_store_fit_adds_laps_and_session_when_coros_has_none(fixture_text):
+    from health.models import Activity, ActivityLap
+    from health.sources.coros.store import import_text
+    from health.sources.fit import store_fit
+
+    with dbmod.session_scope() as s:
+        import_text(s, "querySportRecords", fixture_text("sport_records.txt"))
+        act = s.execute(
+            select(Activity).where(Activity.external_id == "100000000000000003")
+        ).scalar_one()
+        store_fit(s, act, synthetic_run(act.start_ts, minutes=10, running=True))
+        laps = (
+            s.execute(select(ActivityLap).where(ActivityLap.activity_id == act.id)).scalars().all()
+        )
+        assert [lap.idx for lap in laps] == [1, 2] and laps[1].avg_cadence == 168
+        assert laps[0].avg_pace_s_per_km == pytest.approx(300, abs=1)
+        assert act.raw_json["fit_session"]["sport"] == "running"
+
+
+def test_hr_recovery_needs_easing_off_when_speed_is_known():
+    parsed = parse_fit(synthetic_run(START, minutes=10, cooldown_s=120))
+    with_speed = [(x["t_offset_s"], x["hr"], x["speed_mps"]) for x in parsed.samples]
+    assert hr_recovery(with_speed, 190)["drop_bpm"] >= 32  # walked after: counts
+    # same HR curve but still running at effort pace: not a recovery
+    no_ease = [(t, hr, 3.3) for t, hr, _ in with_speed]
+    assert hr_recovery(no_ease, 190) is None

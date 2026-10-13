@@ -72,9 +72,27 @@ def _data(local: int, fields, values) -> bytes:
     )
 
 
-def write_fit(start: datetime, rows: list[dict]) -> bytes:
-    """rows: dicts with t (s from start), hr, distance_m, speed_mps, cadence, power_w, alt_m."""
+_SPORT = [(0, 1, 0x00, "B")]  # sport enum: 1 = running
+_LAP = [
+    (253, 4, 0x86, "I"),  # timestamp
+    (2, 4, 0x86, "I"),  # start_time
+    (8, 4, 0x86, "I"),  # total_timer_time, 1/1000 s
+    (9, 4, 0x86, "I"),  # total_distance, 1/100 m
+    (13, 2, 0x84, "H"),  # avg_speed, 1/1000 m/s
+    (15, 1, 0x02, "B"),  # avg_heart_rate
+    (16, 1, 0x02, "B"),  # max_heart_rate
+    (17, 1, 0x02, "B"),  # avg_cadence (strides/min for running)
+]
+
+
+def write_fit(
+    start: datetime, rows: list[dict], *, running: bool = False, laps: list[dict] | None = None
+) -> bytes:
+    """rows: dicts with t (s from start), hr, distance_m, speed_mps, cadence, power_w, alt_m.
+    laps: dicts with t0, t1 (s from start), distance_m, avg_hr, max_hr, cadence."""
     body = _definition(0, 0, _FILE_ID) + _data(0, _FILE_ID, [4, 294, _fit_ts(start)])
+    if running:
+        body += _definition(2, 12, _SPORT) + _data(2, _SPORT, [1])
     body += _definition(1, 20, _RECORD)
     for r in rows:
         body += _data(
@@ -90,17 +108,43 @@ def write_fit(start: datetime, rows: list[dict]) -> bytes:
                 int(round((r.get("alt_m", 0) + 500) * 5)),
             ],
         )
+    if laps:
+        body += _definition(3, 19, _LAP)
+        for lap in laps:
+            dur = lap["t1"] - lap["t0"]
+            body += _data(
+                3,
+                _LAP,
+                [
+                    _fit_ts(start) + lap["t1"],
+                    _fit_ts(start) + lap["t0"],
+                    int(dur * 1000),
+                    int(lap["distance_m"] * 100),
+                    int(lap["distance_m"] / dur * 1000),
+                    lap["avg_hr"],
+                    lap["max_hr"],
+                    lap["cadence"],
+                ],
+            )
     header = struct.pack("<BBHI4s", 14, 0x20, 2132, len(body), b".FIT")
     header += struct.pack("<H", crc16(header))
     blob = header + body
     return blob + struct.pack("<H", crc16(blob))
 
 
-def synthetic_run(start: datetime, minutes: int = 30, cooldown_s: int = 120) -> bytes:
+def synthetic_run(
+    start: datetime,
+    minutes: int = 30,
+    cooldown_s: int = 120,
+    running: bool = False,
+    pause_at: int | None = None,
+) -> bytes:
     """A made-up steady run that builds to a hard finish, then a walking cool-down."""
     rows, dist = [], 0.0
     total = minutes * 60
     for t in range(0, total + cooldown_s, 1):
+        if pause_at is not None and pause_at <= t < pause_at + 90:
+            continue  # watch paused: no records
         if t < total:
             frac = t / total
             hr = 120 + 55 * min(1.0, frac * 1.3)  # 120 -> 175 bpm
@@ -121,4 +165,25 @@ def synthetic_run(start: datetime, minutes: int = 30, cooldown_s: int = 120) -> 
                 "alt_m": 10 + (t % 300) / 30,
             }
         )
-    return write_fit(start, rows)
+    laps = None
+    if running:
+        half = total // 2
+        laps = [
+            {
+                "t0": 0,
+                "t1": half,
+                "distance_m": 1000.0,
+                "avg_hr": 140,
+                "max_hr": 150,
+                "cadence": 82,
+            },
+            {
+                "t0": half,
+                "t1": total,
+                "distance_m": 1100.0,
+                "avg_hr": 165,
+                "max_hr": 175,
+                "cadence": 84,
+            },
+        ]
+    return write_fit(start, rows, running=running, laps=laps)

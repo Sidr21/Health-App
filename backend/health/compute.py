@@ -447,6 +447,7 @@ def workout_detail(s: Session, activity_id: int) -> dict | None:
     if a is None:
         return None
     detail = (a.raw_json or {}).get("detail", {})
+    fit = (a.raw_json or {}).get("fit_session", {})
     laps = (
         s.execute(
             select(ActivityLap).where(ActivityLap.activity_id == a.id).order_by(ActivityLap.idx)
@@ -465,12 +466,12 @@ def workout_detail(s: Session, activity_id: int) -> dict | None:
     )
     hm = hr_max_for(s, _local_day(a.start_ts))
 
-    stream = [(x.t_offset_s, x.hr) for x in samples]
+    stream = [(x.t_offset_s, x.hr, x.speed_mps) for x in samples]
     zone_block = None
     hrr = None
     if hm is not None:
-        if any(h for _, h in stream):
-            secs = time_in_zones_stream(stream, hm.value)
+        if any(h for _, h, _ in stream):
+            secs = time_in_zones_stream([(t, h) for t, h, _ in stream], hm.value)
             method = "stream"
             hrr = hr_recovery(stream, hm.value)
         else:
@@ -524,6 +525,7 @@ def workout_detail(s: Session, activity_id: int) -> dict | None:
         "stats": {
             "active_s": detail.get("workout_time_s") or a.duration_s,
             "total_s": detail.get("total_time_s")
+            or fit.get("elapsed_s")
             or ((a.end_ts - a.start_ts).total_seconds() if a.end_ts else None),
             "distance_m": a.distance_m,
             "avg_pace_s_per_km": a.avg_pace_s_per_km,
@@ -531,10 +533,10 @@ def workout_detail(s: Session, activity_id: int) -> dict | None:
             "avg_hr": a.avg_hr,
             "max_hr": a.max_hr,
             "avg_power_w": a.avg_power_w,
-            "avg_cadence": detail.get("avg_cadence"),
-            "stride_m": detail.get("stride_m"),
+            "avg_cadence": detail.get("avg_cadence") or fit.get("avg_cadence"),
+            "stride_m": detail.get("stride_m") or fit.get("step_length_m"),
             "elev_gain_m": a.elev_gain_m,
-            "elev_loss_m": detail.get("elev_loss_m"),
+            "elev_loss_m": detail.get("elev_loss_m") or fit.get("descent_m"),
             "calories": a.calories,
         },
         "coros": {

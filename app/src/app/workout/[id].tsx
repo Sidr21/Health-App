@@ -58,7 +58,13 @@ function hrCurve(w: WorkoutDetail) {
 
 function paceCurve(w: WorkoutDetail) {
   if (w.stream.n > 0) {
-    return w.stream.points.map((p) => ({ x: p.t, y: p.speed_mps && p.speed_mps > 0.5 ? 1000 / p.speed_mps : null }));
+    // smooth speed over ~5 points (about a minute at 300 points per run), break the line at stops
+    const pts = w.stream.points;
+    return pts.map((p, i) => {
+      const win = pts.slice(Math.max(0, i - 2), i + 3).map((q) => q.speed_mps).filter((v): v is number => v != null && v > 0.5);
+      const v = win.length >= 3 ? win.reduce((a, b) => a + b, 0) / win.length : null;
+      return { x: p.t, y: v ? 1000 / v : null };
+    });
   }
   const pts: { x: number; y: number | null }[] = [];
   let t = 0;
@@ -117,7 +123,7 @@ export default function WorkoutScreen() {
             </View>
             <View style={{ alignItems: "center" }}>
               <Dial progress={tl != null ? Math.min(1, tl / 200) : null} value={tl != null ? String(Math.round(tl)) : "–"} label="Load" color={colors.strain} size={118} />
-              <Text style={styles.heroCaption}>{tl != null ? loadBand(tl) : "No load from COROS"}</Text>
+              <Text style={styles.heroCaption}>{tl != null ? loadBand(tl) : "COROS summary not synced"}</Text>
             </View>
           </Surface>
 
@@ -204,6 +210,7 @@ export default function WorkoutScreen() {
                   color={colors.recovery}
                   height={130}
                   yFormat={(v) => pace(-v).replace(/ \/(km|mi)$/, "")}
+                  robust
                   xLabels={["0:00", clockDuration(duration)]}
                 />
               </Surface>
@@ -252,6 +259,8 @@ export default function WorkoutScreen() {
             </>
           ) : null}
 
+          {Object.values(w.coros).some((v) => v != null) ? (
+          <>
           <SectionLabel title="COROS says" note="their numbers, for comparison" />
           <Surface style={styles.card}>
             <View style={styles.grid2}>
@@ -262,6 +271,8 @@ export default function WorkoutScreen() {
               <Stat label="Performance" value={w.coros.performance ?? "–"} />
             </View>
           </Surface>
+          </>
+          ) : null}
         </View>
       </ScrollView>
     </View>

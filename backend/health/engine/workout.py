@@ -104,9 +104,14 @@ def cardio_focus(zone_secs: list[float]) -> dict[str, float] | None:
     }
 
 
-def hr_recovery(samples: list[tuple[float, int | None]], hr_max: int) -> dict | None:
-    """Largest 60 s HR drop starting right after >= 3 min spent at or above Z3."""
-    pts = [(t, hr) for t, hr in samples if hr]
+def hr_recovery(samples: list[tuple], hr_max: int) -> dict | None:
+    """Largest 60 s HR drop starting right after >= 3 min spent at or above Z3.
+
+    samples: (t, hr) or (t, hr, speed_mps). With speed, the athlete must actually ease off:
+    the minute after must average under 70 % of the effort's speed, so a dip in HR while
+    still running (a downhill, a gel) is not mistaken for recovery."""
+    pts = [(x[0], x[1]) for x in samples if x[1]]
+    speed_at = {x[0]: x[2] for x in samples if len(x) > 2 and x[1]}
     if len(pts) < 120:
         return None
     z3 = ZONE_BOUNDS[2] * hr_max
@@ -121,9 +126,19 @@ def hr_recovery(samples: list[tuple[float, int | None]], hr_max: int) -> dict | 
             break  # recording ends before a full minute
         while times[k] < t - 180:
             k += 1
+        # the drop must be measured on continuous data: a paused watch hides the recovery
+        if any(times[m + 1] - times[m] > 10 for m in range(k, j)):
+            continue  # effort window and recovery minute both need continuous recording
         window = [h for _, h in pts[k : i + 1]]
         if t - times[k] < 170 or sum(window) / len(window) < z3:
             continue
+        if speed_at:
+            eff = [speed_at.get(tt) for tt in times[k : i + 1]]
+            rec = [speed_at.get(tt) for tt in times[i + 1 : j + 1]]
+            eff = [v for v in eff if v is not None]
+            rec = [v for v in rec if v is not None]
+            if eff and rec and sum(rec) / len(rec) >= 0.7 * (sum(eff) / len(eff)):
+                continue  # still moving at effort pace: not a recovery
         drop = hr - pts[j][1]
         if best is None or drop > best["drop_bpm"]:
             best = {"drop_bpm": drop, "from_bpm": hr, "to_bpm": pts[j][1], "at_s": t}
