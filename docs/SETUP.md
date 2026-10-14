@@ -16,6 +16,10 @@ uv run health coros sync --days 60 # backfill + compute scores
 uv run health show today
 uv run health serve --reload       # http://localhost:8000/docs
 ```
+COROS hands each account to a regional server (`mcpus.coros.com` in the US); the client reads
+COROS's OAuth metadata and connects to the one it names. To pin it, set
+`HEALTH_COROS_MCP_URL=https://mcpus.coros.com/mcp` in `backend/.env`.
+
 If `coros auth` fails at the OAuth step, copy the full error into the chat: that is the one open
 question about the official MCP (whether it accepts third-party clients). Fallback is the Training
 Hub API implementation described in `docs/DESIGN.md` §3.1.

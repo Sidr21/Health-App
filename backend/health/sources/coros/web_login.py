@@ -18,7 +18,7 @@ from mcp.client.auth import OAuthClientProvider
 from mcp.shared.auth import AuthorizationCodeResult, OAuthClientInformationFull, OAuthToken
 
 from health.config import settings
-from health.sources.coros.mcp_client import CorosMcp, client_metadata
+from health.sources.coros.mcp_client import CorosMcp, client_metadata, resolve_mcp_url
 
 PENDING_TIMEOUT_S = 600  # time allowed to finish logging in on the COROS page
 
@@ -64,14 +64,8 @@ class _Pending:
         self.return_to = return_to
         self.url: asyncio.Future[str] = loop.create_future()
         self.code: asyncio.Future[AuthorizationCodeResult] = loop.create_future()
+        self.callback_url = callback_url
         self.storage = MemoryTokenStorage()
-        self.provider = OAuthClientProvider(
-            server_url=settings.coros_mcp_url,
-            client_metadata=client_metadata(callback_url),
-            storage=self.storage,
-            redirect_handler=self._redirect,
-            callback_handler=self._callback,
-        )
         self.task = asyncio.create_task(self._run())
 
     async def _redirect(self, url: str) -> None:
@@ -83,7 +77,14 @@ class _Pending:
 
     async def _run(self) -> None:
         try:
-            async with CorosMcp(auth=self.provider) as c:
+            provider = OAuthClientProvider(
+                server_url=await resolve_mcp_url(),
+                client_metadata=client_metadata(self.callback_url),
+                storage=self.storage,
+                redirect_handler=self._redirect,
+                callback_handler=self._callback,
+            )
+            async with CorosMcp(auth=provider) as c:
                 await c.list_tools()  # proves the new token works before it is saved
             self.storage.save()
         except BaseException as e:

@@ -191,3 +191,48 @@ def test_in_app_login_through_the_api(oauth_coros, monkeypatch):
         assert not settings.coros_token_path.exists()
 
     assert synced == [settings.sync_full_days]  # a full sync started right after connecting
+
+
+_REAL_ASYNC_CLIENT = __import__("httpx2").AsyncClient
+
+
+def _metadata_client(answers: dict[str, tuple[int, dict]]):
+    """An httpx2.AsyncClient stand-in that answers the protected-resource metadata URLs."""
+    import httpx2
+
+    real = _REAL_ASYNC_CLIENT  # not httpx2.AsyncClient: an earlier patch in the test may sit there
+
+    def handler(request):
+        status, body = answers.get(str(request.url), (404, {}))
+        return httpx2.Response(status, json=body)
+
+    return lambda **kw: real(transport=httpx2.MockTransport(handler), **kw)
+
+
+def test_regional_host_is_followed(monkeypatch):
+    """COROS's global host names the account's regional one (mcpus.coros.com for the US); the
+    SDK refuses the mismatch, so we read the metadata and connect to the regional host."""
+    import httpx2
+
+    from health.sources.coros import mcp_client
+
+    url = "https://mcp.coros.com/mcp"
+    meta = "https://mcp.coros.com/.well-known/oauth-protected-resource/mcp"
+    monkeypatch.setattr(mcp_client, "_resolved", {})
+    monkeypatch.setattr(
+        httpx2,
+        "AsyncClient",
+        _metadata_client({meta: (200, {"resource": "https://mcpus.coros.com/mcp"})}),
+    )
+    assert asyncio.run(mcp_client.resolve_mcp_url(url)) == "https://mcpus.coros.com/mcp"
+
+    # another site, plain http, or no metadata: keep the configured URL
+    for resource in ("https://evil.example.com/mcp", "http://mcpus.coros.com/mcp"):
+        monkeypatch.setattr(mcp_client, "_resolved", {})
+        monkeypatch.setattr(
+            httpx2, "AsyncClient", _metadata_client({meta: (200, {"resource": resource})})
+        )
+        assert asyncio.run(mcp_client.resolve_mcp_url(url)) == url
+    monkeypatch.setattr(mcp_client, "_resolved", {})
+    monkeypatch.setattr(httpx2, "AsyncClient", _metadata_client({}))
+    assert asyncio.run(mcp_client.resolve_mcp_url(url)) == url

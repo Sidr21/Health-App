@@ -1,4 +1,5 @@
-"""Client for the official COROS MCP server (https://mcp.coros.com/mcp).
+"""Client for the official COROS MCP server (https://mcp.coros.com/mcp, which hands each account
+to a regional host such as https://mcpus.coros.com/mcp; see `resolve_mcp_url`).
 
 Spike for DESIGN §3.1: can a third-party backend authenticate? The server advertises OAuth
 (RFC 9728 protected-resource metadata); the MCP SDK's OAuthClientProvider handles discovery,
@@ -104,6 +105,50 @@ class _CallbackServer:
         )
 
 
+_resolved: dict[str, str] = {}
+
+
+def _site(host: str) -> str:
+    return ".".join(host.lower().split(".")[-2:])
+
+
+async def resolve_mcp_url(url: str | None = None) -> str:
+    """The MCP URL to use. COROS serves accounts from regional hosts (mcpus.coros.com in the
+    US) and says which in its protected-resource metadata (RFC 9728); the MCP SDK refuses a
+    URL that differs from that resource instead of following it. So read the metadata first
+    and use the resource it names, as long as it is https on the same site (*.coros.com)."""
+    url = url or settings.coros_mcp_url
+    if url in _resolved:
+        return _resolved[url]
+    p = urlparse(url)
+    origin = f"{p.scheme}://{p.netloc}"
+    resolved = url
+    try:
+        async with httpx2.AsyncClient(timeout=15) as h:
+            for meta in (
+                f"{origin}/.well-known/oauth-protected-resource{p.path}",
+                f"{origin}/.well-known/oauth-protected-resource",
+            ):
+                r = await h.get(meta)
+                if r.status_code != 200:
+                    continue
+                resource = r.json().get("resource")
+                if isinstance(resource, str):
+                    q = urlparse(resource)
+                    if (
+                        q.scheme == "https"
+                        and q.hostname
+                        and p.hostname
+                        and _site(q.hostname) == _site(p.hostname)
+                    ):
+                        resolved = resource
+                break
+    except (httpx2.HTTPError, ValueError):
+        pass  # no metadata: connect to the configured URL and let the SDK report what's wrong
+    _resolved[url] = resolved
+    return resolved
+
+
 def client_metadata(redirect_uri: str) -> OAuthClientMetadata:
     return OAuthClientMetadata(
         client_name="Health App (personal)",
@@ -114,7 +159,7 @@ def client_metadata(redirect_uri: str) -> OAuthClientMetadata:
     )
 
 
-def build_auth(interactive: bool) -> OAuthClientProvider:
+def build_auth(interactive: bool, server_url: str | None = None) -> OAuthClientProvider:
     port = settings.coros_oauth_callback_port
     cb = _CallbackServer(port) if interactive else None
 
@@ -129,7 +174,7 @@ def build_auth(interactive: bool) -> OAuthClientProvider:
     if cb:
         cb.serve()
     return OAuthClientProvider(
-        server_url=settings.coros_mcp_url,
+        server_url=server_url or settings.coros_mcp_url,
         client_metadata=client_metadata(f"http://127.0.0.1:{port}/callback"),
         storage=FileTokenStorage(settings.coros_token_path),
         redirect_handler=redirect_handler if interactive else None,
@@ -146,9 +191,10 @@ class CorosMcp:
         self.session: ClientSession | None = None
 
     async def __aenter__(self) -> CorosMcp:
-        auth = self._auth or build_auth(self.interactive)
+        url = await resolve_mcp_url()
+        auth = self._auth or build_auth(self.interactive, url)
         self._http = httpx2.AsyncClient(auth=auth, timeout=60)
-        self._transport = streamable_http_client(settings.coros_mcp_url, http_client=self._http)
+        self._transport = streamable_http_client(url, http_client=self._http)
         read, write, *_ = await self._transport.__aenter__()
         self._session_cm = ClientSession(read, write)
         self.session = await self._session_cm.__aenter__()
