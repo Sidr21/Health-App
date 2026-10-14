@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     sync_fit_limit: int = 3  # new FIT downloads per run (COROS caps daily downloads)
     docs: bool = True  # serve /docs and /openapi.json
     public: bool = False  # internet-facing deploy: refuse to start with a weak API token
+    public_url: str | None = None  # e.g. https://health-sidr21.fly.dev; else from the request
 
     @property
     def raw_dir(self) -> Path:

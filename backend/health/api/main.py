@@ -7,8 +7,9 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from fastapi import Body, Depends, FastAPI, HTTPException, Query
+from fastapi import Body, Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
@@ -256,6 +257,125 @@ def body(metric: str | None = None, limit: int = 200, s: Session = Depends(get_s
 @app.post("/ingest/apple-health", dependencies=[Depends(require_token)])
 def ingest_apple_health(payload: HKPayload, s: Session = Depends(get_session)) -> dict:
     return ingest(s, payload)
+
+
+# ---------------------------------------------------------------- connections
+
+
+def _base_url(request: Request) -> str:
+    """This server's public URL: the setting, else what the proxy (Fly) says it is."""
+    if settings.public_url:
+        return settings.public_url.rstrip("/")
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    return f"{proto}://{host}"
+
+
+@app.get("/connections", dependencies=[Depends(require_token)])
+def connections(s: Session = Depends(get_session)) -> dict:
+    """What each data source has delivered, for the Connections screen."""
+    from health import scheduler
+
+    coros_last = s.execute(
+        select(func.max(SyncLog.ts)).where(SyncLog.source == "coros", SyncLog.ok.is_(True))
+    ).scalar_one()
+    newest = s.execute(
+        select(func.max(Activity.start_ts)).where(Activity.source == "coros")
+    ).scalar_one()
+    apple = s.execute(
+        select(BodyMetric.metric, func.count(), func.max(BodyMetric.ts))
+        .where(BodyMetric.source.like("apple:%"))
+        .group_by(BodyMetric.metric)
+    ).all()
+    nights = s.execute(
+        select(func.count(func.distinct(SleepSegment.date))).where(
+            SleepSegment.source.like("apple:%")
+        )
+    ).scalar_one()
+    lifting = s.execute(
+        select(StrengthSet.source, func.count(), func.max(StrengthSet.ts)).group_by(
+            StrengthSet.source
+        )
+    ).all()
+
+    def iso(ts):
+        return ts.replace(tzinfo=UTC).isoformat() if ts else None
+
+    return {
+        "coros": {
+            "connected": scheduler.coros_authorized(),
+            "last_sync": iso(coros_last),
+            "newest_activity": iso(newest),
+            "sync": scheduler.state.public(),
+        },
+        "apple_health": {
+            "last_sample": iso(max((t for _, _, t in apple), default=None)),
+            "metrics": [
+                {"metric": m, "samples": n, "latest": iso(t)} for m, n, t in sorted(apple)
+            ],
+            "sleep_nights": nights,
+        },
+        "strength": [
+            {"source": src, "sets": n, "latest": iso(t)} for src, n, t in sorted(lifting)
+        ],
+        "server": {"version": __version__, "public": settings.public, "tz": settings.timezone},
+    }
+
+
+class CorosLoginIn(BaseModel):
+    return_to: str | None = Field(None, max_length=200)
+
+
+@app.post("/connect/coros/start", dependencies=[Depends(require_token)])
+async def coros_login_start(request: Request, body: CorosLoginIn | None = None) -> dict:
+    """Start a COROS login; the app opens `auth_url` in an in-app browser."""
+    from health.sources.coros import web_login
+
+    return_to = body.return_to if body else None
+    if return_to and not return_to.startswith(("healthapp://", "exp+health-app://")):
+        raise HTTPException(422, "return_to must be an app link")
+    callback = f"{_base_url(request)}/connect/coros/callback"
+    try:
+        url = await web_login.start(callback, return_to)
+    except web_login.LoginError as e:
+        raise HTTPException(502, str(e)) from e
+    return {"auth_url": url, "callback_url": callback}
+
+
+_PAGE = (
+    "<html><head><meta name='viewport' content='width=device-width'></head>"
+    "<body style='font-family:-apple-system,sans-serif;background:#0B0B0E;color:#fff;"
+    "padding:40px 24px'><h2>{title}</h2><p style='color:#aaa'>{body}</p></body></html>"
+)
+
+
+@app.get("/connect/coros/callback", include_in_schema=False)
+async def coros_login_callback(request: Request):
+    """COROS redirects the browser here after login. No bearer token (it's the browser), but
+    it only completes a login this server started, and the OAuth state must match."""
+    from html import escape
+
+    from health import scheduler
+    from health.sources.coros import web_login
+
+    try:
+        return_to = await web_login.finish(dict(request.query_params))
+    except web_login.LoginError as e:
+        page = _PAGE.format(title="COROS login failed", body=escape(str(e)))
+        return HTMLResponse(page, status_code=400)
+    scheduler.start_background(scheduler.run_once(settings.sync_full_days))
+    if return_to:
+        return RedirectResponse(f"{return_to}?coros=connected", status_code=302)
+    page = _PAGE.format(title="COROS connected", body="Syncing now. You can close this page.")
+    return HTMLResponse(page)
+
+
+@app.delete("/connect/coros", dependencies=[Depends(require_token)])
+def coros_disconnect() -> dict:
+    """Forget the COROS login on this server (the sync stops until you connect again)."""
+    from health.sources.coros import web_login
+
+    return {"removed": web_login.disconnect(), "connected": False}
 
 
 @app.get("/sync/state", dependencies=[Depends(require_token)])

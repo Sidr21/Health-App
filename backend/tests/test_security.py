@@ -7,7 +7,7 @@ from health.api.auth import require_token
 from health.api.main import app
 from health.config import check_public_token, settings
 
-OPEN = {"/health"}
+OPEN = {"/health", "/connect/coros/callback"}  # the browser lands on the callback
 
 
 def test_every_route_but_health_requires_the_token():

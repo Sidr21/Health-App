@@ -17,11 +17,16 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-import httpx
+import httpx2
 from mcp import ClientSession
 from mcp.client.auth import OAuthClientProvider, TokenStorage
 from mcp.client.streamable_http import streamable_http_client
-from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
+from mcp.shared.auth import (
+    AuthorizationCodeResult,
+    OAuthClientInformationFull,
+    OAuthClientMetadata,
+    OAuthToken,
+)
 
 from health.config import settings
 
@@ -86,7 +91,7 @@ class _CallbackServer:
     def serve(self) -> None:
         threading.Thread(target=self._server.serve_forever, daemon=True).start()
 
-    async def wait(self, timeout: float = 300) -> tuple[str, str | None]:
+    async def wait(self, timeout: float = 300) -> AuthorizationCodeResult:
         loop = asyncio.get_running_loop()
         ok = await loop.run_in_executor(None, self._done.wait, timeout)
         self._server.shutdown()
@@ -94,7 +99,19 @@ class _CallbackServer:
             raise TimeoutError("no OAuth callback received")
         if "error" in self.result:
             raise RuntimeError(f"OAuth error: {self.result}")
-        return self.result["code"], self.result.get("state")
+        return AuthorizationCodeResult(
+            code=self.result["code"], state=self.result.get("state"), iss=self.result.get("iss")
+        )
+
+
+def client_metadata(redirect_uri: str) -> OAuthClientMetadata:
+    return OAuthClientMetadata(
+        client_name="Health App (personal)",
+        redirect_uris=[redirect_uri],
+        grant_types=["authorization_code", "refresh_token"],
+        response_types=["code"],
+        token_endpoint_auth_method="none",
+    )
 
 
 def build_auth(interactive: bool) -> OAuthClientProvider:
@@ -105,7 +122,7 @@ def build_auth(interactive: bool) -> OAuthClientProvider:
         print(f"\nOpen this URL to log in to COROS:\n{url}\n")
         webbrowser.open(url)
 
-    async def callback_handler() -> tuple[str, str | None]:
+    async def callback_handler() -> AuthorizationCodeResult:
         assert cb is not None
         return await cb.wait()
 
@@ -113,13 +130,7 @@ def build_auth(interactive: bool) -> OAuthClientProvider:
         cb.serve()
     return OAuthClientProvider(
         server_url=settings.coros_mcp_url,
-        client_metadata=OAuthClientMetadata(
-            client_name="Health App (personal)",
-            redirect_uris=[f"http://127.0.0.1:{port}/callback"],
-            grant_types=["authorization_code", "refresh_token"],
-            response_types=["code"],
-            token_endpoint_auth_method="none",
-        ),
+        client_metadata=client_metadata(f"http://127.0.0.1:{port}/callback"),
         storage=FileTokenStorage(settings.coros_token_path),
         redirect_handler=redirect_handler if interactive else None,
         callback_handler=callback_handler if interactive else None,
@@ -129,13 +140,14 @@ def build_auth(interactive: bool) -> OAuthClientProvider:
 class CorosMcp:
     """`async with CorosMcp() as c: await c.call("queryUserInfo")`."""
 
-    def __init__(self, interactive: bool = False):
+    def __init__(self, interactive: bool = False, auth: OAuthClientProvider | None = None):
         self.interactive = interactive
-        self._stack: list[Any] = []
+        self._auth = auth  # a prepared provider (the in-app login); else built from settings
         self.session: ClientSession | None = None
 
     async def __aenter__(self) -> CorosMcp:
-        self._http = httpx.AsyncClient(auth=build_auth(self.interactive), timeout=60)
+        auth = self._auth or build_auth(self.interactive)
+        self._http = httpx2.AsyncClient(auth=auth, timeout=60)
         self._transport = streamable_http_client(settings.coros_mcp_url, http_client=self._http)
         read, write, *_ = await self._transport.__aenter__()
         self._session_cm = ClientSession(read, write)
@@ -162,6 +174,6 @@ class CorosMcp:
             text = getattr(c, "text", None)
             if text is not None:
                 parts.append(text)
-        if res.isError:
+        if res.is_error:
             raise RuntimeError(f"{tool} failed: {''.join(parts)[:500]}")
         return "\n".join(parts)
