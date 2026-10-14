@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -5,7 +6,8 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Card } from "@/components/Card";
 import { Gauge } from "@/components/Gauge";
 import { Header, RoundButton } from "@/components/Header";
-import { ArrowRight, CalendarIcon, DotsIcon, PlusIcon, ZzzIcon } from "@/components/icons";
+import { ArrowRight, CalendarIcon, DotsIcon, DumbbellIcon, FlameIcon, HeartIcon, PlusIcon, PulseIcon, RouteIcon, ZzzIcon } from "@/components/icons";
+import { DatePickerSheet, MenuSheet } from "@/components/Sheet";
 import { Screen } from "@/components/Screen";
 import { SectionLabel } from "@/components/SectionLabel";
 import { WeekStrip, type WeekDay } from "@/components/WeekStrip";
@@ -13,14 +15,23 @@ import { WorkoutCard } from "@/components/WorkoutCard";
 import { FreshnessCard, SessionCard, StrengthStatCards } from "@/components/StrengthWidgets";
 import { dayOfMonth, longDayLabel, weekOf, weekdayIndex, WEEKDAY_LETTERS } from "@/lib/dates";
 import { hms } from "@/lib/format";
+import { clockDuration } from "@/lib/units";
 import { sportMeta } from "@/lib/sport";
+import { api } from "@/lib/api";
 import { useStrength } from "@/lib/strength";
 import { todayIso, useDays } from "@/lib/useDays";
 import { colors, font, fonts, spacing } from "@/theme/tokens";
 
 export default function FitnessScreen() {
-  const q = useDays(28);
+  const q = useDays(120);
   const today = todayIso();
+  const models = useQuery({ queryKey: ["fitness-models"], queryFn: api.fitnessModels });
+  const [picking, setPicking] = useState(false);
+  const [menu, setMenu] = useState<"more" | "add" | null>(null);
+  const marked = useMemo(() => new Set(q.days.filter((d) => d.activities.length).map((d) => d.date)), [q.days]);
+  const vo2 = models.data?.vo2max;
+  const vo2Value = vo2?.ours?.value ?? vo2?.coros?.value ?? null;
+  const hrr = models.data?.hr_recovery;
   const strength = useStrength(today);
   const [selected, setSelected] = useState(today);
   const week = useMemo(() => weekOf(selected), [selected]);
@@ -47,15 +58,15 @@ export default function FitnessScreen() {
       <Header
         centered
         title="Fitness"
-        left={<RoundButton><CalendarIcon size={20} color={colors.text} /></RoundButton>}
-        right={<RoundButton><DotsIcon size={20} color={colors.text} /></RoundButton>}
+        left={<RoundButton onPress={() => setPicking(true)}><CalendarIcon size={20} color={colors.text} /></RoundButton>}
+        right={<RoundButton onPress={() => setMenu("more")}><DotsIcon size={20} color={colors.text} /></RoundButton>}
       />
       <WeekStrip days={days} selected={selected} onSelect={setSelected} />
 
       <View style={styles.dayRow}>
         <Text style={styles.dayTitle}>{longDayLabel(selected)}</Text>
         <View style={styles.dayRight}>
-          <Pressable style={styles.smallRound}><PlusIcon size={18} color={colors.text} /></Pressable>
+          <Pressable style={styles.smallRound} onPress={() => setMenu("add")} accessibilityLabel="Add"><PlusIcon size={18} color={colors.text} /></Pressable>
         </View>
       </View>
       {day?.activities.length ? day.activities.map((a) => <WorkoutCard key={a.id} a={a} />) : (
@@ -89,7 +100,7 @@ export default function FitnessScreen() {
       </View>
       <Text style={styles.footnote}>Cardio: daily training impulse (TRIMP) averaged over the last week vs your 6-week base. Muscular: set-equivalents over 7 days, from lifting and cardio.</Text>
 
-      <SectionLabel title="Cardio" action={<Text style={styles.edit}>Edit</Text>} />
+      <SectionLabel title="Cardio" />
       <View style={styles.grid}>
         <Card style={styles.half}>
           <Text style={styles.cardTitle}>Active time</Text>
@@ -101,15 +112,29 @@ export default function FitnessScreen() {
           <Text style={styles.cardValue}>{weekKcal.toLocaleString()}<Text style={styles.cardUnit}> kcal</Text></Text>
           <Text style={styles.cardSub}>This week</Text>
         </Card>
-        <Card style={styles.half}>
+        <Card style={styles.half} onPress={() => router.push("/fitness-models")}>
           <Text style={styles.cardTitle}>VO₂ max</Text>
-          <Text style={styles.cardPending}>Pending</Text>
-          <Text style={styles.cardSub}>Our own estimate from FIT heart-rate and pace streams</Text>
+          {vo2Value != null ? (
+            <Text style={styles.cardValue}>{vo2Value.toFixed(1)}</Text>
+          ) : (
+            <Text style={styles.cardPending}>{models.isLoading ? "…" : "No estimate yet"}</Text>
+          )}
+          <Text style={styles.cardSub}>
+            {vo2?.ours ? `Ours${vo2.coros ? ` · COROS ${vo2.coros.value}` : ""}` : vo2?.coros ? "COROS (ours needs FIT streams)" : "Needs runs with FIT streams"}
+          </Text>
         </Card>
-        <Card style={styles.half}>
+        <Card style={styles.half} onPress={hrr?.latest ? () => router.push(`/workout/${hrr.latest!.activity_id}`) : undefined}>
           <Text style={styles.cardTitle}>HR recovery</Text>
-          <Text style={styles.cardPending}>Pending</Text>
-          <Text style={styles.cardSub}>60 s drop after hard efforts, from FIT streams</Text>
+          {hrr?.latest ? (
+            <Text style={styles.cardValue}>{hrr.latest.drop_bpm}<Text style={styles.cardUnit}> bpm</Text></Text>
+          ) : (
+            <Text style={styles.cardPending}>{models.isLoading ? "…" : "None yet"}</Text>
+          )}
+          <Text style={styles.cardSub}>
+            {hrr?.latest
+              ? `${hrr.latest.rating} · ${new Date(`${hrr.latest.date}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" })}${hrr.best && hrr.best.drop_bpm > hrr.latest.drop_bpm ? ` · best ${hrr.best.drop_bpm}` : ""}`
+              : "Keep the watch recording for a minute after a hard effort"}
+          </Text>
         </Card>
       </View>
 
@@ -118,7 +143,20 @@ export default function FitnessScreen() {
         <View style={styles.modelsRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.cardTitle}>VO₂max · threshold · HRmax · race times</Text>
-            <Text style={styles.cardSub}>Our estimates next to COROS&apos;s. HRmax and zones are live; VO₂max and threshold need FIT streams.</Text>
+            <Text style={styles.cardSub}>
+              {models.data
+                ? [
+                    models.data.lthr ? `Threshold ${Math.round(models.data.lthr.value)} bpm` : null,
+                    models.data.hr_max ? `max ${models.data.hr_max.value} bpm` : null,
+                    (() => {
+                      const r5 = models.data.races.find((r) => r.key === "race_5k");
+                      return r5?.ours_s ? `5K ${clockDuration(r5.ours_s)}` : null;
+                    })(),
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || "Our estimates next to COROS's"
+                : "Our estimates next to COROS's"}
+            </Text>
           </View>
           <ArrowRight size={16} color={colors.textMuted} />
         </View>
@@ -151,6 +189,36 @@ export default function FitnessScreen() {
           <Text style={styles.cardSub}>{strength.isError ? `Cannot reach the backend (${String(strength.error)})` : "Loading strength…"}</Text>
         </Card>
       )}
+      <DatePickerSheet
+        key={selected}
+        visible={picking}
+        onClose={() => setPicking(false)}
+        value={selected}
+        max={today}
+        onChange={setSelected}
+        marked={marked}
+        title="Jump to a day"
+      />
+      <MenuSheet
+        visible={menu === "more"}
+        onClose={() => setMenu(null)}
+        items={[
+          { label: "Training zones", sub: "Heart rate and pace", icon: HeartIcon, color: colors.recoveryRed, onPress: () => router.push("/zones") },
+          { label: "Fitness models", sub: "VO₂max, threshold, race predictions", icon: PulseIcon, color: colors.recovery, onPress: () => router.push("/fitness-models") },
+          { label: "Race results", icon: RouteIcon, color: colors.cardio, onPress: () => router.push("/races") },
+          { label: "Cardio load", icon: FlameIcon, color: colors.strain, onPress: () => router.push("/cardio-load") },
+          { label: "Muscle groups", icon: DumbbellIcon, color: colors.muscular, onPress: () => router.push("/muscles") },
+        ]}
+      />
+      <MenuSheet
+        visible={menu === "add"}
+        onClose={() => setMenu(null)}
+        title="Add"
+        items={[
+          { label: "Log a lift", sub: "Sets, reps and weight", icon: DumbbellIcon, color: colors.muscular, onPress: () => router.push("/strength/log") },
+          { label: "Race result", sub: "Calibrates VO₂max and predictions", icon: RouteIcon, color: colors.cardio, onPress: () => router.push("/races") },
+        ]}
+      />
     </Screen>
   );
 }
@@ -163,7 +231,6 @@ const styles = StyleSheet.create({
   empty: { ...font.body, color: colors.textMuted, textAlign: "center" },
   section: { ...font.heading, fontSize: 20, color: colors.text, marginTop: spacing.lg, marginBottom: spacing.md },
   sectionRow: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" },
-  edit: { ...font.label, color: colors.textMuted, textDecorationLine: "underline" },
   gauges: { flexDirection: "row", justifyContent: "space-between" },
   footnote: { ...font.caption, color: colors.textFaint, marginBottom: spacing.sm },
   grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },

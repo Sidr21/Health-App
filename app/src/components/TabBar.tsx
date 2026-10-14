@@ -1,10 +1,11 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import React, { type ComponentType } from "react";
+import React, { useState, type ComponentType } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { HeartIcon, HomeIcon, JournalIcon, PlusIcon, RunnerIcon, type IconProps } from "@/components/icons";
+import { DumbbellIcon, HeartIcon, HomeIcon, JournalIcon, PlusIcon, RouteIcon, RunnerIcon, type IconProps } from "@/components/icons";
+import { MenuSheet } from "@/components/Sheet";
 import { colors, font, radius } from "@/theme/tokens";
 
 const ICONS: Record<string, ComponentType<IconProps>> = {
@@ -29,6 +30,7 @@ const PILL = ["#222733", "#161A22"] as const;
 /** Bevel's floating pill tab bar: gradient glass pill with a highlight border and a separate round "+". */
 export function TabBar({ state, descriptors, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets();
+  const [add, setAdd] = useState(false);
   return (
     <View style={styles.outer} pointerEvents="box-none">
       <LinearGradient colors={["rgba(10,12,17,0)", "rgba(10,12,17,0.92)", colors.bg]} locations={[0, 0.5, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
@@ -58,11 +60,21 @@ export function TabBar({ state, descriptors, navigation }: TabBarProps) {
           })}
         </LinearGradient>
         <LinearGradient colors={[...PILL]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.fab}>
-          <Pressable style={styles.fabInner} accessibilityLabel="Log a lift" onPress={() => router.push("/strength/log")}>
+          <Pressable style={styles.fabInner} accessibilityLabel="Add" onPress={() => setAdd(true)}>
             <PlusIcon size={26} color={colors.text} />
           </Pressable>
         </LinearGradient>
       </View>
+      <MenuSheet
+        visible={add}
+        onClose={() => setAdd(false)}
+        title="Add"
+        items={[
+          { label: "Log a lift", sub: "Sets, reps and weight", icon: DumbbellIcon, color: colors.muscular, onPress: () => router.push("/strength/log") },
+          { label: "Journal entry", sub: "Caffeine, alcohol, mood…", icon: JournalIcon, color: colors.gold, onPress: () => navigation.navigate("journal") },
+          { label: "Race result", sub: "Calibrates VO₂max and predictions", icon: RouteIcon, color: colors.cardio, onPress: () => router.push("/races") },
+        ]}
+      />
     </View>
   );
 }

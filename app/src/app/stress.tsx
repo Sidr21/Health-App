@@ -1,3 +1,4 @@
+import { useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import React from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
@@ -33,9 +34,10 @@ function clock(min: number): string {
 }
 
 export default function StressScreen() {
-  const date = todayIso();
+  const params = useLocalSearchParams<{ date?: string }>();
+  const date = params.date ?? todayIso();
   const q = useQuery({ queryKey: ["stress", date], queryFn: () => api.stressDay(date) });
-  const days = useDays(28);
+  const days = useDays(28, date);
   const st = q.data;
   const today = days.days[days.days.length - 1];
   const mean = st?.awake_mean ?? today?.scores.stress?.value ?? null;

@@ -12,8 +12,12 @@ export interface ScoreEntry {
   components: Record<string, unknown> | null;
 }
 
+export type DayStatus = "active" | "rest_day" | "sick" | "travel";
+
 export interface DayPayload {
   date: string;
+  status?: DayStatus;
+  vitals?: { resp_rate?: number; spo2_pct?: number };
   scores: Partial<Record<"recovery" | "sleep" | "strain" | "stress" | "energy" | "cardio_load" | "muscular", ScoreEntry>>;
   daily: {
     steps: number | null;
@@ -236,6 +240,15 @@ export interface ConnectionsOut {
   server: { version: string; public: boolean; tz: string };
 }
 
+export interface HrRecoveryOut {
+  drop_bpm: number;
+  from_bpm: number;
+  to_bpm: number;
+  rating: string;
+  activity_id: number;
+  date: string;
+}
+
 export interface ValueAt {
   value: number;
   date: string;
@@ -252,6 +265,11 @@ export interface FitnessModels {
   races: { key: string; label: string; distance_m: number; coros_s: ValueAt | null; ours_s: number | null }[];
   prediction: { vdot: number; method: string; economy: number | null } | null;
   inputs: { runs: number; runs_with_streams: number };
+  hr_recovery: {
+    latest: HrRecoveryOut | null;
+    best: HrRecoveryOut | null;
+    checked: number;
+  } | null;
 }
 
 export interface BioAgeOut {
@@ -385,6 +403,9 @@ export const api = {
   syncState: () => request<SyncStateOut>("/sync/state"),
   syncNow: () => request<SyncStateOut>("/sync", { method: "POST" }),
   connections: () => request<ConnectionsOut>("/connections"),
+  status: () => request<{ status: DayStatus; since: string | null }>("/status"),
+  putStatus: (status: DayStatus) =>
+    request<{ status: DayStatus; since: string | null }>("/status", { method: "PUT", body: JSON.stringify({ status }) }),
   corosLoginStart: (returnTo?: string) =>
     request<{ auth_url: string; callback_url: string }>("/connect/coros/start", { method: "POST", body: JSON.stringify({ return_to: returnTo }) }),
   corosDisconnect: () => request<{ removed: boolean; connected: boolean }>("/connect/coros", { method: "DELETE" }),

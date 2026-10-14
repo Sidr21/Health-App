@@ -10,13 +10,15 @@ interface Props {
   title: string;
   subtitle?: string;
   dropdown?: boolean;
+  /** tap on the subtitle (with `dropdown`): e.g. open a date picker */
+  onSubtitlePress?: () => void;
   mode?: "back" | "close";
   right?: ReactNode;
   tint?: string;
 }
 
 /** Bevel's detail header: round back/close button, centered title with a date dropdown beneath. */
-export function DetailHeader({ title, subtitle, dropdown, mode = "back", right, tint }: Props) {
+export function DetailHeader({ title, subtitle, dropdown, onSubtitlePress, mode = "back", right, tint }: Props) {
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.row, { paddingTop: insets.top + spacing.sm }]}>
@@ -26,10 +28,10 @@ export function DetailHeader({ title, subtitle, dropdown, mode = "back", right, 
       <View style={styles.center}>
         <Text style={styles.title}>{title}</Text>
         {subtitle ? (
-          <View style={styles.subRow}>
+          <Pressable style={styles.subRow} onPress={onSubtitlePress} disabled={!onSubtitlePress} hitSlop={8}>
             <Text style={styles.subtitle}>{subtitle}</Text>
-            {dropdown ? <ChevronDown size={14} color={colors.textMuted} /> : null}
-          </View>
+            {dropdown && onSubtitlePress ? <ChevronDown size={14} color={colors.textMuted} /> : null}
+          </Pressable>
         ) : null}
       </View>
       <View style={styles.side}>{right}</View>

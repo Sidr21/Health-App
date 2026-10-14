@@ -1,8 +1,10 @@
-import React from "react";
+import { useLocalSearchParams } from "expo-router";
+import React, { useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { Backdrop } from "@/components/Backdrop";
 import { DetailHeader } from "@/components/DetailHeader";
+import { DatePickerSheet } from "@/components/Sheet";
 import { Aurora } from "@/components/Aurora";
 import { Surface } from "@/components/Surface";
 import { ArrowRight, BedIcon, ClockIcon, MoonIcon, SparkleIcon } from "@/components/icons";
@@ -44,7 +46,10 @@ function coaching(score: number | null, awakeCount: number | null, awakeS: numbe
 }
 
 export default function SleepScreen() {
-  const q = useDays(28);
+  const params = useLocalSearchParams<{ date?: string }>();
+  const [date, setDate] = useState(params.date ?? todayIso());
+  const [picking, setPicking] = useState(false);
+  const q = useDays(28, date);
   const today = q.days[q.days.length - 1];
   const s = today?.sleep;
   const score = today?.scores.sleep?.value ?? null;
@@ -60,7 +65,7 @@ export default function SleepScreen() {
       <ScrollView contentContainerStyle={{ paddingBottom: spacing.xxl }}>
         <View style={styles.hero}>
           <Aurora variant="night" />
-          <DetailHeader title="Sleep" subtitle={`Today, ${title}`} dropdown />
+          <DetailHeader title="Sleep" subtitle={`${date === todayIso() ? "Today" : new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { weekday: "short" })}, ${title}`} dropdown onSubtitlePress={() => setPicking(true)} />
           <View style={styles.heroRing}>
             <Dial progress={score != null ? score / 100 : null} value={score != null ? `${Math.round(score)}%` : "–"} caption="Sleep quality" color={colors.sleep} size={210} stroke={12} />
           </View>
@@ -115,6 +120,7 @@ export default function SleepScreen() {
           <MetricCard icon={MoonIcon} title="Deep sleep" value={hms(s?.deep_s)} status={s?.deep_s != null && s.asleep_s ? { label: s.deep_s / s.asleep_s >= 0.13 ? "Normal range" : "Below normal", tone: s.deep_s / s.asleep_s >= 0.13 ? "good" : "bad", direction: s.deep_s / s.asleep_s >= 0.13 ? undefined : "down" } : null} series={stripe((d) => (d.sleep?.deep_s != null ? d.sleep.deep_s / 3600 : null))} color={colors.sleepDeep} />
         </View>
       </ScrollView>
+      <DatePickerSheet key={date} visible={picking} onClose={() => setPicking(false)} value={date} max={todayIso()} onChange={setDate} />
     </View>
   );
 }

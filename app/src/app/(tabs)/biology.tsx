@@ -1,14 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
-import React from "react";
+import React, { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import type { VitalKey } from "@/lib/vitals";
 import { ContributionBars } from "@/components/BioAge";
 import { Card } from "@/components/Card";
 import { Header, RoundButton } from "@/components/Header";
-import { DotsIcon } from "@/components/icons";
+import { DotsIcon, HeartIcon, LeafIcon, PulseIcon, SparkleIcon } from "@/components/icons";
 import { Screen } from "@/components/Screen";
+import { MenuSheet } from "@/components/Sheet";
 import { SectionLabel } from "@/components/SectionLabel";
 import { Sparkline } from "@/components/Sparkline";
 import { Surface } from "@/components/Surface";
@@ -71,13 +72,14 @@ function BioAgeCard() {
 }
 
 export default function BiologyScreen() {
+  const [menu, setMenu] = useState(false);
   const q = useDays(28);
   const latest = q.days[q.days.length - 1];
   const comps = (latest?.scores.recovery?.components ?? {}) as { hrv_ms?: number };
   const body = useQuery({ queryKey: ["body"], queryFn: () => api.bodySummary(365) });
   return (
     <Screen refreshing={q.isFetching} onRefresh={() => q.refetch()}>
-      <Header centered title="Biology" left={<View style={{ width: 44 }} />} right={<RoundButton><DotsIcon size={20} color={colors.text} /></RoundButton>} />
+      <Header centered title="Biology" left={<View style={{ width: 44 }} />} right={<RoundButton onPress={() => setMenu(true)}><DotsIcon size={20} color={colors.text} /></RoundButton>} />
       <SectionLabel title="Vitals" note="last 28 days" />
       <View style={styles.grid}>
         <Tile metric="hrv" title="Resting HRV" value={comps.hrv_ms != null ? comps.hrv_ms.toFixed(0) : "–"} unit="ms" series={q.days.map((d) => ((d.scores.recovery?.components as { hrv_ms?: number } | null)?.hrv_ms ?? null))} color={colors.recovery} />
@@ -117,6 +119,17 @@ export default function BiologyScreen() {
       </View>
       <SectionLabel title="Biological age" />
       <BioAgeCard />
+      <MenuSheet
+        visible={menu}
+        onClose={() => setMenu(false)}
+        items={[
+          { label: "Biological age", sub: "What sets it, week by week", icon: SparkleIcon, color: colors.recovery, onPress: () => router.push("/bioage") },
+          { label: "HRV trend", icon: PulseIcon, color: colors.recovery, onPress: () => router.push({ pathname: "/vital/[metric]", params: { metric: "hrv" } }) },
+          { label: "Resting HR trend", icon: HeartIcon, color: colors.cardio, onPress: () => router.push({ pathname: "/vital/[metric]", params: { metric: "rhr" } }) },
+          { label: "Weight", icon: LeafIcon, color: colors.sleepRem, onPress: () => router.push({ pathname: "/body/[metric]", params: { metric: "weight_kg" } }) },
+          { label: "Connections", sub: "Apple Health, COROS", icon: LeafIcon, color: colors.textMuted, onPress: () => router.push("/connections") },
+        ]}
+      />
     </Screen>
   );
 }

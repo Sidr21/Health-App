@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import React from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
@@ -22,7 +22,8 @@ const BANDS = [
 ];
 
 export default function StrainScreen() {
-  const q = useDays(28);
+  const { date } = useLocalSearchParams<{ date?: string }>();
+  const q = useDays(28, date);
   const today = q.days[q.days.length - 1];
   const sc = today?.scores.strain;
   const c = comps<StrainComps>(today, "strain");

@@ -121,7 +121,7 @@ def ingest(s: Session, payload: HKPayload) -> dict[str, int]:
         if val is None:
             skipped += 1
             continue
-        if metric == "body_fat_pct" and val <= 1.0:
+        if metric in ("body_fat_pct", "spo2_pct") and val <= 1.0:
             val *= 100  # HealthKit stores percentages as fractions
         source = f"apple:{smp.source}"
         exists = s.execute(

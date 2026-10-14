@@ -4,8 +4,9 @@ import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { Header, RoundButton } from "@/components/Header";
-import { CheckCircle, DotsIcon, SparkleIcon } from "@/components/icons";
+import { CalendarIcon, CheckCircle, CloseIcon, DotsIcon, SparkleIcon } from "@/components/icons";
 import { Screen } from "@/components/Screen";
+import { DatePickerSheet, MenuSheet } from "@/components/Sheet";
 import { Surface } from "@/components/Surface";
 import { WeekStrip, type WeekDay } from "@/components/WeekStrip";
 import { api } from "@/lib/api";
@@ -76,6 +77,8 @@ export default function JournalScreen() {
   const today = todayIso();
   const qc = useQueryClient();
   const [selected, setSelected] = useState(today);
+  const [menu, setMenu] = useState(false);
+  const [picking, setPicking] = useState(false);
   const week = weekOf(selected);
   const q = useQuery({ queryKey: ["journal", week[0], week[6]], queryFn: () => api.journal(week[0], week[6]) });
   const byDay: Record<string, Record<string, number | null>> = {};
@@ -99,6 +102,16 @@ export default function JournalScreen() {
     dim: iso > today,
   }));
   const logged = Object.keys(values).length;
+  const clearDay = useMutation({
+    mutationFn: async () => {
+      for (const tag of Object.keys(values)) await api.deleteJournal(selected, tag);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["journal"] });
+      qc.invalidateQueries({ queryKey: ["insights"] });
+    },
+  });
+  const dayName = new Date(`${selected}T00:00:00`).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
 
   return (
     <Screen refreshing={q.isFetching} onRefresh={() => q.refetch()}>
@@ -107,7 +120,7 @@ export default function JournalScreen() {
           <SparkleIcon size={16} color={colors.text} />
           <Text style={styles.insightsText}>Insights</Text>
         </Pressable>
-        <RoundButton><DotsIcon size={20} color={colors.text} /></RoundButton>
+        <RoundButton onPress={() => setMenu(true)}><DotsIcon size={20} color={colors.text} /></RoundButton>
       </View>
       <Header title="Journal" subtitle={monthLabel(selected)} />
       <View style={styles.weekHead}>
@@ -134,6 +147,18 @@ export default function JournalScreen() {
       <Text style={styles.footnote}>
         {save.isError ? `Could not save: ${String(save.error)}` : q.isError ? `Cannot reach the backend (${String(q.error)})` : "Saved to your backend as you tap. ✕ = no, ✓ = yes, — clears the entry."}
       </Text>
+      <MenuSheet
+        visible={menu}
+        onClose={() => setMenu(false)}
+        items={[
+          { label: "Insights", sub: "What your tags do to recovery and sleep", icon: SparkleIcon, color: colors.gold, onPress: () => router.push("/journal/insights") },
+          { label: "Pick a day", sub: "Fill in an earlier day", icon: CalendarIcon, color: colors.cardio, onPress: () => setPicking(true) },
+          ...(logged
+            ? [{ label: `Clear ${dayName}`, sub: `Removes ${logged} entr${logged === 1 ? "y" : "ies"}`, icon: CloseIcon, color: colors.recoveryRed, onPress: () => clearDay.mutate() }]
+            : []),
+        ]}
+      />
+      <DatePickerSheet key={selected} visible={picking} onClose={() => setPicking(false)} value={selected} max={today} onChange={setSelected} title="Journal day" />
     </Screen>
   );
 }

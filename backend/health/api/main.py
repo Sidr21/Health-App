@@ -131,8 +131,23 @@ def _day_payload(s: Session, d: date) -> dict:
             func.min(StressSample.stress), func.max(StressSample.stress), func.max(StressSample.ts)
         ).where(StressSample.ts >= lo, StressSample.ts < hi)
     ).one()
+    from health import day_status
+
+    vitals = dict(
+        s.execute(
+            select(BodyMetric.metric, func.avg(BodyMetric.value))
+            .where(
+                BodyMetric.ts >= lo,
+                BodyMetric.ts < hi,
+                BodyMetric.metric.in_(("resp_rate", "spo2_pct")),
+            )
+            .group_by(BodyMetric.metric)
+        ).all()
+    )
     return {
         "date": d.isoformat(),
+        "status": day_status.on_day(s, d),
+        "vitals": {k: round(v, 1) for k, v in vitals.items()},
         "scores": _scores_for(s, d),
         "daily": {
             "steps": daily.steps if daily else None,
@@ -310,14 +325,10 @@ def connections(s: Session = Depends(get_session)) -> dict:
         },
         "apple_health": {
             "last_sample": iso(max((t for _, _, t in apple), default=None)),
-            "metrics": [
-                {"metric": m, "samples": n, "latest": iso(t)} for m, n, t in sorted(apple)
-            ],
+            "metrics": [{"metric": m, "samples": n, "latest": iso(t)} for m, n, t in sorted(apple)],
             "sleep_nights": nights,
         },
-        "strength": [
-            {"source": src, "sets": n, "latest": iso(t)} for src, n, t in sorted(lifting)
-        ],
+        "strength": [{"source": src, "sets": n, "latest": iso(t)} for src, n, t in sorted(lifting)],
         "server": {"version": __version__, "public": settings.public, "tz": settings.timezone},
     }
 
@@ -553,6 +564,25 @@ def journal_delete(day: date, tag: str, s: Session = Depends(get_session)) -> di
 @app.get("/journal/insights", dependencies=[Depends(require_token)])
 def journal_insights_api(days: int = Query(90, ge=14, le=365), s: Session = Depends(get_session)):
     return journal_insights(s, today_local(), days)
+
+
+class StatusIn(BaseModel):
+    status: Literal["active", "rest_day", "sick", "travel"]
+
+
+@app.get("/status", dependencies=[Depends(require_token)])
+def status_get(s: Session = Depends(get_session)) -> dict:
+    """Today's status ("until changed"); logs it to the journal for each day it has lasted."""
+    from health import day_status
+
+    return day_status.current(s, _today())
+
+
+@app.put("/status", dependencies=[Depends(require_token)])
+def status_put(body: StatusIn, s: Session = Depends(get_session)) -> dict:
+    from health import day_status
+
+    return day_status.set_status(s, body.status, _today())
 
 
 # ---------------------------------------------------------------- body, settings, models

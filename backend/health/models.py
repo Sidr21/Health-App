@@ -33,6 +33,8 @@ class User(Base):
     hr_max_source: Mapped[str | None] = mapped_column(String(20))  # user|field_test|estimated
     lthr: Mapped[int | None] = mapped_column(Integer)  # set by the user (lab or field test)
     zone_basis: Mapped[str | None] = mapped_column(String(10))  # lthr (default) | hr_max
+    day_status: Mapped[str | None] = mapped_column(String(10))  # rest_day|sick|travel; None=active
+    day_status_since: Mapped[date | None] = mapped_column(Date)
     units: Mapped[str] = mapped_column(String(10), default="imperial")
     sleep_need_min: Mapped[int | None] = mapped_column(Integer, default=480)
     tz: Mapped[str] = mapped_column(String(40), default="America/New_York")

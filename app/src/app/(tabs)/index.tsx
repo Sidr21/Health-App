@@ -1,18 +1,23 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useState } from "react";
+import { Pressable, Share, StyleSheet, Text, View } from "react-native";
 
 import { Chip } from "@/components/Chip";
 import { Dial } from "@/components/Dial";
 import { EnergyBar, MonitorTile, NotTrackedRow, StressCard, TimelineSleepCard } from "@/components/HomeWidgets";
 import { SectionLabel } from "@/components/SectionLabel";
+import { DatePickerSheet, MenuSheet } from "@/components/Sheet";
 import { Sparkline } from "@/components/Sparkline";
+import { WorkoutCard } from "@/components/WorkoutCard";
 import {
-  BedIcon, ChevronDown, CloudIcon, DropIcon, HeartIcon, LungsIcon, PulseIcon, RunnerIcon, ShareIcon, SunIcon, ThermoIcon,
+  BedIcon, ChevronDown, CloudIcon, DropIcon, HeartIcon, LungsIcon, PulseIcon, RouteIcon, RunnerIcon, ShareIcon, SunIcon, ThermoIcon, WalkIcon,
+  type IconProps,
 } from "@/components/icons";
 import { Screen } from "@/components/Screen";
 import { Surface } from "@/components/Surface";
+import { api, type DayPayload, type DayStatus } from "@/lib/api";
+import { addDays } from "@/lib/dates";
 import { hms, pct } from "@/lib/format";
 import { todayIso, useDays } from "@/lib/useDays";
 import { DEFAULT_LOCATION, fetchWeather } from "@/lib/weather";
@@ -27,6 +32,33 @@ interface RecoveryComps {
   calibrating?: boolean;
 }
 
+const STATUS: Record<DayStatus, { label: string; icon: React.ComponentType<IconProps>; color: string; sub: string }> = {
+  active: { label: "Active", icon: RunnerIcon, color: colors.run, sub: "Training as normal" },
+  rest_day: { label: "Rest day", icon: BedIcon, color: colors.sleep, sub: "Planned rest" },
+  sick: { label: "Sick", icon: ThermoIcon, color: colors.recoveryAmber, sub: "Logged to the journal each day" },
+  travel: { label: "Travel", icon: RouteIcon, color: colors.cardio, sub: "Jet lag and disrupted sleep" },
+};
+
+function kicker(iso: string, today: string): string {
+  if (iso === today) return "Today";
+  if (iso === addDays(today, -1)) return "Yesterday";
+  return new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { weekday: "long" });
+}
+
+function shareText(d: DayPayload): string {
+  const parts = [new Date(`${d.date}T00:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })];
+  const rec = d.scores.recovery?.value;
+  const slp = d.scores.sleep?.value;
+  const str = d.scores.strain?.value;
+  const hrv = (d.scores.recovery?.components as { hrv_ms?: number } | null)?.hrv_ms;
+  if (rec != null) parts.push(`Recovery ${Math.round(rec)}%`);
+  if (d.sleep?.asleep_s != null) parts.push(`Sleep ${hms(d.sleep.asleep_s)}${slp != null ? ` (${Math.round(slp)})` : ""}`);
+  if (str != null) parts.push(`Strain ${str.toFixed(1)}`);
+  if (hrv != null) parts.push(`HRV ${Math.round(hrv)} ms`);
+  if (d.daily.rhr != null) parts.push(`RHR ${d.daily.rhr} bpm`);
+  return parts.join(" · ");
+}
+
 function headerDate(iso: string): string {
   return new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
 }
@@ -38,8 +70,28 @@ function normal(value: number | null | undefined, base: number | null | undefine
 }
 
 export default function HomeScreen() {
-  const q = useDays(14);
-  const today = q.days[q.days.length - 1];
+  const qc = useQueryClient();
+  const now = todayIso();
+  const [date, setDate] = useState(now);
+  const isToday = date === now;
+  const [picking, setPicking] = useState(false);
+  const [statusMenu, setStatusMenu] = useState(false);
+  const q = useDays(14, date);
+  const today = q.byDate.get(date);
+  const statusQ = useQuery({ queryKey: ["status"], queryFn: api.status });
+  const setStatus = useMutation({
+    mutationFn: api.putStatus,
+    onSuccess: (data) => {
+      qc.setQueryData(["status"], data);
+      qc.invalidateQueries({ queryKey: ["days"] });
+      qc.invalidateQueries({ queryKey: ["journal"] });
+    },
+  });
+  const status: DayStatus = (isToday ? statusQ.data?.status : today?.status) ?? "active";
+  const st = STATUS[status];
+  const at = (pathname: "/strain" | "/recovery" | "/energy" | "/stress") => (isToday ? pathname : { pathname, params: { date } });
+  const workoutDays = useDays(120);
+  const marked = new Set(workoutDays.days.filter((d) => d.activities.length).map((d) => d.date));
   const weather = useQuery({ queryKey: ["weather"], queryFn: () => fetchWeather(), staleTime: 30 * 60_000 });
   const rec = today?.scores.recovery;
   const sleep = today?.scores.sleep;
@@ -47,6 +99,7 @@ export default function HomeScreen() {
   const comps = (rec?.components ?? {}) as RecoveryComps;
   const WeatherIcon = weather.data && weather.data.code >= 3 ? CloudIcon : SunIcon;
   const rhr = today?.daily.rhr ?? null;
+  const vit = today?.vitals ?? {};
   const asleep = today?.sleep?.asleep_s ?? null;
   const hrvSeries = q.days.map((d) => ((d.scores.recovery?.components as { hrv_ms?: number } | null)?.hrv_ms ?? null));
   const rhrSeries = q.days.map((d) => d.daily.rhr);
@@ -56,31 +109,48 @@ export default function HomeScreen() {
     <Screen refreshing={q.isFetching} onRefresh={() => q.refetch()}>
       <View style={styles.topBar}>
         <View style={styles.topPill}>
-          <Pressable style={styles.topBtn}><ShareIcon size={18} color={colors.text} /></Pressable>
+          <Pressable style={styles.topBtn} disabled={!today} onPress={() => today && Share.share({ message: shareText(today) })} accessibilityLabel="Share today">
+            <ShareIcon size={18} color={colors.text} />
+          </Pressable>
           <Pressable onPress={() => router.push("/settings")} style={styles.avatar}><Text style={styles.avatarText}>SR</Text></Pressable>
         </View>
       </View>
-      <Text style={styles.kicker}>Today</Text>
-      <Pressable style={styles.titleRow}>
-        <Text style={styles.title}>{headerDate(today?.date ?? todayIso())}</Text>
+      <Text style={styles.kicker}>{kicker(date, now)}</Text>
+      <Pressable style={styles.titleRow} onPress={() => setPicking(true)} accessibilityLabel="Pick a day">
+        <Text style={styles.title}>{headerDate(date)}</Text>
         <ChevronDown size={18} color={colors.textMuted} />
       </Pressable>
 
       <View style={styles.chips}>
-        <Chip icon={<RunnerIcon size={16} color="#fff" />} iconBg={colors.run} title="Active" subtitle="Until changed" dropdown />
         <Chip
-          icon={<WeatherIcon size={16} color={colors.stress} />}
-          title={weather.data ? `${Math.round(weather.data.tempF)}°F` : DEFAULT_LOCATION.name}
-          subtitle={weather.data ? DEFAULT_LOCATION.name : "Weather unavailable"}
+          icon={<st.icon size={16} color="#fff" />}
+          iconBg={st.color}
+          title={st.label}
+          subtitle={isToday ? (status === "active" ? "Until changed" : statusQ.data?.since ? `Since ${new Date(`${statusQ.data.since}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : "Until changed") : "That day"}
+          dropdown={isToday}
+          onPress={isToday ? () => setStatusMenu(true) : undefined}
         />
+        {isToday ? (
+          <Chip
+            icon={<WeatherIcon size={16} color={colors.stress} />}
+            title={weather.data ? `${Math.round(weather.data.tempF)}°F` : DEFAULT_LOCATION.name}
+            subtitle={weather.data ? DEFAULT_LOCATION.name : "Weather unavailable"}
+          />
+        ) : (
+          <Chip
+            icon={<WalkIcon size={16} color={colors.energy} />}
+            title={today?.daily.steps != null ? today.daily.steps.toLocaleString() : "–"}
+            subtitle="Steps"
+          />
+        )}
       </View>
 
       <Surface radiusSize={radius.lg} style={styles.ringCard}>
         <View style={styles.dials}>
-          <Pressable style={styles.ringCol} onPress={() => router.push("/strain")}>
+          <Pressable style={styles.ringCol} onPress={() => router.push(at("/strain"))}>
             <Dial label="Strain" progress={strainSc ? strainSc.value / 21 : null} value={strainSc ? strainSc.value.toFixed(1) : "–"} color={colors.strain} hatched={!strainSc} />
           </Pressable>
-          <Pressable style={styles.ringCol} onPress={() => router.push("/recovery")}>
+          <Pressable style={styles.ringCol} onPress={() => router.push(at("/recovery"))}>
             <Dial label="Recovery" progress={rec ? rec.value / 100 : null} value={rec ? pct(rec.value) : "–"} color={bandColor(comps.band)} />
           </Pressable>
           <Pressable style={styles.ringCol} onPress={() => router.push("/sleep")}>
@@ -90,12 +160,12 @@ export default function HomeScreen() {
       </Surface>
 
       <View style={styles.vitals}>
-        <Surface style={styles.vital} onPress={() => router.push("/recovery")}>
+        <Surface style={styles.vital} onPress={() => router.push({ pathname: "/vital/[metric]", params: { metric: "hrv" } })}>
           <Text style={styles.vitalLabel}>HRV</Text>
           <Text style={styles.vitalValue}>{comps.hrv_ms != null ? comps.hrv_ms.toFixed(0) : "–"}<Text style={styles.vitalUnit}> ms</Text></Text>
           <Sparkline values={hrvSeries} color={colors.recovery} width={84} height={26} band={comps.hrv_base_ms ? { low: comps.hrv_base_ms * 0.85, high: comps.hrv_base_ms * 1.15 } : null} />
         </Surface>
-        <Surface style={styles.vital} onPress={() => router.push("/recovery")}>
+        <Surface style={styles.vital} onPress={() => router.push({ pathname: "/vital/[metric]", params: { metric: "rhr" } })}>
           <Text style={styles.vitalLabel}>Resting HR</Text>
           <Text style={styles.vitalValue}>{rhr ?? "–"}<Text style={styles.vitalUnit}> bpm</Text></Text>
           <Sparkline values={rhrSeries} color={colors.strain} width={84} height={26} band={comps.rhr_base ? { low: comps.rhr_base - 3, high: comps.rhr_base + 3 } : null} />
@@ -114,8 +184,8 @@ export default function HomeScreen() {
       ) : null}
 
       <SectionLabel title="Stress & Energy" />
-      <StressCard avg={today?.daily.stress_avg ?? null} min={today?.daily.stress_min ?? null} max={today?.daily.stress_max ?? null} updated={today?.daily.stress_updated ?? null} onPress={() => router.push("/stress")} />
-      <EnergyBar pct={today?.scores.energy?.value ?? null} onPress={() => router.push("/energy")} />
+      <StressCard avg={today?.daily.stress_avg ?? null} min={today?.daily.stress_min ?? null} max={today?.daily.stress_max ?? null} updated={today?.daily.stress_updated ?? null} onPress={() => router.push(at("/stress"))} />
+      <EnergyBar pct={today?.scores.energy?.value ?? null} onPress={() => router.push(at("/energy"))} />
 
       <SectionLabel title="Health Monitor" note="vs your 28-day normal" />
       <View style={styles.grid}>
@@ -127,7 +197,7 @@ export default function HomeScreen() {
           status={normal(rhr, comps.rhr_base)}
           range={rhr != null && comps.rhr_base ? { v: rhr, lo: comps.rhr_base - 3, hi: comps.rhr_base + 3, min: comps.rhr_base - 12, max: comps.rhr_base + 12 } : null}
           color={normal(rhr, comps.rhr_base) === "Normal" ? colors.recovery : colors.recoveryAmber}
-          onPress={() => router.push("/recovery")}
+          onPress={() => router.push({ pathname: "/vital/[metric]", params: { metric: "rhr" } })}
         />
         <MonitorTile
           icon={PulseIcon}
@@ -137,7 +207,7 @@ export default function HomeScreen() {
           status={normal(comps.hrv_ms, comps.hrv_base_ms)}
           range={comps.hrv_ms != null && comps.hrv_base_ms ? { v: comps.hrv_ms, lo: comps.hrv_base_ms * 0.85, hi: comps.hrv_base_ms * 1.15, min: comps.hrv_base_ms * 0.5, max: comps.hrv_base_ms * 1.5 } : null}
           color={normal(comps.hrv_ms, comps.hrv_base_ms) === "Normal" ? colors.recovery : colors.recoveryAmber}
-          onPress={() => router.push("/recovery")}
+          onPress={() => router.push({ pathname: "/vital/[metric]", params: { metric: "hrv" } })}
         />
         <MonitorTile
           icon={BedIcon}
@@ -156,15 +226,57 @@ export default function HomeScreen() {
           status={today?.daily.stress_avg != null ? (today.daily.stress_avg <= 35 ? "Low" : today.daily.stress_avg <= 60 ? "Moderate" : "High") : null}
           range={today?.daily.stress_avg != null ? { v: today.daily.stress_avg, lo: 0, hi: 35, min: 0, max: 100 } : null}
           color={today?.daily.stress_avg != null && today.daily.stress_avg > 35 ? colors.recoveryAmber : colors.recovery}
+          onPress={() => router.push(at("/stress"))}
         />
+        {vit.resp_rate != null ? (
+          <MonitorTile
+            icon={LungsIcon}
+            label="Resp. rate"
+            value={vit.resp_rate.toFixed(1)}
+            unit="/min"
+            status={vit.resp_rate >= 12 && vit.resp_rate <= 20 ? "Normal" : "Unusual"}
+            range={{ v: vit.resp_rate, lo: 12, hi: 20, min: 8, max: 26 }}
+            color={vit.resp_rate >= 12 && vit.resp_rate <= 20 ? colors.recovery : colors.recoveryAmber}
+          />
+        ) : null}
+        {vit.spo2_pct != null ? (
+          <MonitorTile
+            icon={DropIcon}
+            label="SpO₂"
+            value={vit.spo2_pct.toFixed(0)}
+            unit="%"
+            status={vit.spo2_pct >= 95 ? "Normal" : "Low"}
+            range={{ v: vit.spo2_pct, lo: 95, hi: 100, min: 88, max: 100 }}
+            color={vit.spo2_pct >= 95 ? colors.recovery : colors.recoveryAmber}
+          />
+        ) : null}
       </View>
-      <NotTrackedRow items={[{ icon: LungsIcon, label: "Resp. rate" }, { icon: DropIcon, label: "SpO₂" }, { icon: ThermoIcon, label: "Skin temp" }]} />
+      <NotTrackedRow
+        items={[
+          ...(vit.resp_rate == null ? [{ icon: LungsIcon, label: "Resp. rate" }] : []),
+          ...(vit.spo2_pct == null ? [{ icon: DropIcon, label: "SpO₂" }] : []),
+          { icon: ThermoIcon, label: "Skin temp" },
+        ]}
+      />
 
-      <SectionLabel title="Timeline" note={today?.sleep ? "1 event" : "0 events"} />
+      <SectionLabel title="Timeline" note={`${(today?.sleep ? 1 : 0) + (today?.activities.length ?? 0)} events`} />
       {today?.sleep ? <TimelineSleepCard end={today.sleep.end} score={sleep?.value ?? null} asleepS={today.sleep.asleep_s} /> : null}
-      {today?.activities.length ? (
-        <Text style={styles.empty}>{today.activities.length} workout{today.activities.length > 1 ? "s" : ""} today · see Fitness</Text>
-      ) : null}
+      {(today?.activities ?? []).map((a) => <WorkoutCard key={a.id} a={a} />)}
+
+      <DatePickerSheet key={date} visible={picking} onClose={() => setPicking(false)} value={date} max={now} onChange={setDate} marked={marked} />
+      <MenuSheet
+        visible={statusMenu}
+        onClose={() => setStatusMenu(false)}
+        title="Today is…"
+        items={(Object.keys(STATUS) as DayStatus[]).map((k) => ({
+          label: STATUS[k].label,
+          sub: STATUS[k].sub,
+          icon: STATUS[k].icon,
+          color: STATUS[k].color,
+          selected: k === status,
+          onPress: () => setStatus.mutate(k),
+        }))}
+      />
     </Screen>
   );
 }

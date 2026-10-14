@@ -19,7 +19,14 @@ export const TAGS: TagDef[] = [
   { key: "screens", emoji: "📱", label: "Screens in bed", kind: "tri", group: "night" },
 ];
 
-export const TAG_BY_KEY: Record<string, TagDef> = Object.fromEntries(TAGS.map((t) => [t.key, t]));
+/** Written by the Home status chip ("until changed"), shown in Insights, not as Journal rows. */
+export const STATUS_TAGS: TagDef[] = [
+  { key: "rest_day", emoji: "🛌", label: "Rest day", kind: "tri", group: "day" },
+  { key: "sick", emoji: "🤒", label: "Sick", kind: "tri", group: "day" },
+  { key: "travel", emoji: "✈️", label: "Travel", kind: "tri", group: "day" },
+];
+
+export const TAG_BY_KEY: Record<string, TagDef> = Object.fromEntries([...TAGS, ...STATUS_TAGS].map((t) => [t.key, t]));
 
 export function tagLabel(key: string): string {
   return TAG_BY_KEY[key]?.label ?? key.replace(/_/g, " ");

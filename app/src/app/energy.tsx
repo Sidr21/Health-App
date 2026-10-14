@@ -1,3 +1,4 @@
+import { useLocalSearchParams } from "expo-router";
 import React from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
@@ -32,7 +33,8 @@ function Term({ label, sub, v, color, plain }: { label: string; sub: string; v: 
 }
 
 export default function EnergyScreen() {
-  const q = useDays(14);
+  const { date } = useLocalSearchParams<{ date?: string }>();
+  const q = useDays(14, date);
   const today = q.days[q.days.length - 1];
   const sc = today?.scores.energy;
   const c = comps<EnergyComps>(today, "energy");

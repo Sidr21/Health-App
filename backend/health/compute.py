@@ -753,6 +753,49 @@ def body_summary(s: Session, end: date, days: int = 365) -> dict:
     return {"height_cm": height, "metrics": out}
 
 
+def latest_hr_recovery(s: Session, today: date, look_back: int = 10) -> dict | None:
+    """HR recovery from the most recent workouts with a FIT stream (newest first), plus the
+    best of them, for the Fitness tab card."""
+    from health.models import ActivitySample
+
+    ids = [i for (i,) in s.execute(select(ActivitySample.activity_id).distinct())]
+    if not ids:
+        return None
+    acts = (
+        s.execute(
+            select(Activity)
+            .where(Activity.id.in_(ids), Activity.start_ts < _end_of_local_day(today))
+            .order_by(Activity.start_ts.desc())
+            .limit(look_back)
+        )
+        .scalars()
+        .all()
+    )
+    found = []
+    for a in acts:
+        zm = zone_model_for(s, _local_day(a.start_ts))
+        if zm is None:
+            continue
+        stream = [
+            (x.t_offset_s, x.hr, x.speed_mps)
+            for x in s.execute(
+                select(ActivitySample)
+                .where(ActivitySample.activity_id == a.id)
+                .order_by(ActivitySample.t_offset_s)
+            ).scalars()
+        ]
+        hrr = hr_recovery(stream, zm)
+        if hrr:
+            found.append({**hrr, "activity_id": a.id, "date": _local_day(a.start_ts).isoformat()})
+    if not found:
+        return {"latest": None, "best": None, "checked": len(acts)}
+    return {
+        "latest": found[0],
+        "best": max(found, key=lambda x: x["drop_bpm"]),
+        "checked": len(acts),
+    }
+
+
 RACES = [
     ("race_5k", "5K", 5000),
     ("race_10k", "10K", 10000),
@@ -840,4 +883,5 @@ def fitness_models(s: Session, today: date) -> dict:
         ],
         "prediction": (pred.inputs if pred else None),
         "inputs": {"runs": len(runs), "runs_with_streams": n_stream},
+        "hr_recovery": latest_hr_recovery(s, today),
     }
