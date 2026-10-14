@@ -18,7 +18,10 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.sidr21.healthapp",
       "infoPlist": {
-        "UIBackgroundModes": ["fetch", "processing"],
+        "UIBackgroundModes": [
+          "fetch",
+          "processing"
+        ],
         "NSHealthShareUsageDescription": "Health reads your body measurements (weight, BMI, body fat) and vitals from Apple Health to track trends next to your COROS data.",
         "NSHealthUpdateUsageDescription": "Health does not write to Apple Health."
       },
@@ -36,14 +39,23 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       }
     },
-    "web": { "favicon": "./assets/favicon.png", "bundler": "metro" },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-notifications",
       "expo-background-task",
-      ["@kingstinct/react-native-healthkit", { "background": true }]
+      [
+        "@kingstinct/react-native-healthkit",
+        {
+          "background": true
+        }
+      ]
     ],
-    "experiments": { "typedRoutes": true }
+    "experiments": {
+      "typedRoutes": true
+    }
   }
 }

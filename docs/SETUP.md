@@ -33,16 +33,29 @@ for a Strong export in kilograms without a unit column). Re-importing replaces t
 `uv run health strength show today` prints muscle freshness and load.
 
 ## 2. App (development build on your phone, free Apple ID)
+Extra prerequisites: CocoaPods (`brew install cocoapods`), and on the iPhone Developer Mode
+(Settings → Privacy & Security → Developer Mode, then restart). Plug the phone in by cable the
+first time and tap "Trust This Computer".
+
 ```bash
 cd app
 npm install --legacy-peer-deps
-cp .env.example .env               # EXPO_PUBLIC_API_URL=http://<mac-lan-ip>:8000, EXPO_PUBLIC_API_TOKEN=<same token>
+cp .env.example .env               # EXPO_PUBLIC_API_URL=http://<mac-lan-ip>:8000 (ipconfig getifaddr en0),
+                                   # EXPO_PUBLIC_API_TOKEN=<same as HEALTH_API_TOKEN in backend/.env>
 npx expo prebuild --platform ios   # generates ios/ (gitignored)
-npx expo run:ios --device          # pick your iPhone; first build takes a while
+npx expo run:ios --device          # pick your iPhone; first build takes 5–15 min
 ```
-Xcode will ask you to pick a signing team: choose your personal team (free Apple ID). The HealthKit
-entitlement is in `app.json` and is allowed on free accounts. Re-run `expo run:ios --device` every
-7 days when the free profile expires. Afterwards `npx expo start --dev-client` hot-reloads JS.
+- Signing: if the build stops on signing, open `ios/Health.xcworkspace` in Xcode → target
+  *Health* → Signing & Capabilities → Team = your Apple ID (Personal Team), then re-run. If the
+  bundle ID `com.sidr21.healthapp` is reported as taken, change `ios.bundleIdentifier` in
+  `app.json` (e.g. add a suffix) and run prebuild again.
+- First launch: iOS refuses the app until you trust it: Settings → General → VPN & Device
+  Management → your Apple ID → Trust.
+- Allow "Local Network" when asked: the app talks to the backend on your Mac over Wi-Fi.
+- The app only needs the HealthKit capability, which free accounts can sign. Don't add push
+  notifications (paid accounts only); `expo-notifications` was removed for that reason.
+- Free provisioning expires after 7 days: re-run `npx expo run:ios --device`. Day to day,
+  `npx expo start --dev-client` hot-reloads JS changes onto the installed app.
 
 In the app: open Settings → "Connect Apple Health & sync now", allow the body-measurement types.
 
