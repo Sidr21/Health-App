@@ -15,6 +15,9 @@ interface Props {
   stroke?: number;
   hatched?: boolean;
   trackColor?: string;
+  /** a target range drawn as a thin arc just outside the track, as fractions of the sweep */
+  band?: [number, number] | null;
+  bandColor?: string;
 }
 
 const A0 = 135;
@@ -34,7 +37,7 @@ function arc(cx: number, cy: number, r: number, a0: number, a1: number) {
 
 let uid = 0;
 
-export function Dial({ progress, value, label, caption, color, size = 104, stroke = 8, hatched, trackColor }: Props) {
+export function Dial({ progress, value, label, caption, color, size = 104, stroke = 8, hatched, trackColor, band, bandColor = colors.recovery }: Props) {
   const id = React.useMemo(() => `dial${++uid}`, []);
   const cx = size / 2;
   const cy = size / 2;
@@ -58,6 +61,16 @@ export function Dial({ progress, value, label, caption, color, size = 104, strok
           </Pattern>
         </Defs>
         <Path d={arc(cx, cy, r, A0, A1)} stroke={trackColor ?? "rgba(255,255,255,0.07)"} strokeWidth={stroke} fill="none" strokeLinecap="round" />
+        {band && band[1] > band[0] ? (
+          <Path
+            d={arc(cx, cy, r + stroke + 1, A0 + Math.max(0, band[0]) * (A1 - A0), A0 + Math.min(1, band[1]) * (A1 - A0))}
+            stroke={bandColor}
+            strokeWidth={3}
+            fill="none"
+            strokeLinecap="round"
+            opacity={0.9}
+          />
+        ) : null}
         {end != null ? (
           <>
             <Path d={arc(cx, cy, r, A0, end)} stroke={color} strokeWidth={stroke * 2.4} fill="none" strokeLinecap="round" opacity={0.13} />

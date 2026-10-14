@@ -187,3 +187,17 @@ def test_race_result_calibrates_vo2max_and_predictions(fixture_text):
     gone = c.get("/fitness/models", headers=H).json()
     assert "race_result" not in gone["vo2max"]["parts"]
     assert c.delete(f"/races/{r['id']}", headers=H).status_code == 404
+
+
+def test_cardio_load_rows_only_where_history_exists(fixture_text):
+    from health.compute import compute_range
+    from health.models import Score
+
+    _load(fixture_text)
+    with dbmod.session_scope() as s:
+        s.add(Score(date=date(2026, 9, 1), kind="cardio_load", value=0.0, components={}))
+        s.flush()
+        compute_range(s, date(2026, 8, 25), D)
+        rows = s.execute(select(Score).where(Score.kind == "cardio_load")).scalars().all()
+    assert rows and all(r.components["history_days"] >= 0 for r in rows)
+    assert date(2026, 9, 1) not in {r.date for r in rows}  # stale pre-history row removed

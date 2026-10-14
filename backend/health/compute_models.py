@@ -170,6 +170,15 @@ def store_load_scores(s: Session, start: date, end: date) -> int:
     days = sorted(per_day)
     series = ld.training_load(days, {d: v["trimp"] for d, v in per_day.items()})
     first_data = series[0].day if series else None
+    # days before the load history starts have no CTL/ATL: drop rows an earlier run left there
+    s.execute(
+        delete(Score).where(
+            Score.kind == "cardio_load",
+            Score.date >= start,
+            Score.date <= end,
+            *([Score.date < first_data] if first_data else []),
+        )
+    )
     hm = hr_max_for(s, end)
     n = 0
     for p in series:

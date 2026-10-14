@@ -4,9 +4,10 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { Backdrop } from "@/components/Backdrop";
 import { LineChart } from "@/components/Charts";
 import { DetailHeader } from "@/components/DetailHeader";
-import { Gauge } from "@/components/Gauge";
+import { Dial } from "@/components/Dial";
 import { SectionLabel } from "@/components/SectionLabel";
 import { Surface } from "@/components/Surface";
+import { longDayLabel } from "@/lib/dates";
 import { comps, shortDate, type CardioComps } from "@/lib/scores";
 import { useDays } from "@/lib/useDays";
 import { colors, font, fonts, spacing } from "@/theme/tokens";
@@ -22,40 +23,53 @@ export default function CardioLoadScreen() {
   const q = useDays(90);
   const latest = [...q.days].reverse().find((d) => d.scores.cardio_load);
   const c = comps<CardioComps>(latest, "cardio_load");
-  const rows = q.days.map((d, i) => ({ i, c: comps<CardioComps>(d, "cardio_load"), d }));
+  // chart only the stretch that has a load history, not 90 days of mostly empty axis
+  const first = q.days.findIndex((d) => d.scores.cardio_load);
+  const shown = first < 0 ? [] : q.days.slice(first);
+  const rows = shown.map((d, i) => ({ i, c: comps<CardioComps>(d, "cardio_load"), d }));
   const atl = rows.map((r) => ({ x: r.i, y: r.c?.atl ?? null }));
   const ctl = rows.map((r) => ({ x: r.i, y: r.c?.ctl ?? null }));
   const band = rows.filter((r) => r.c).map((r) => ({ x: r.i, lo: 0.8 * r.c!.ctl, hi: 1.3 * r.c!.ctl }));
   const tsb = rows.map((r) => ({ x: r.i, y: r.c?.tsb ?? null }));
   const coros = latest?.daily;
-  const labels: [string, string] | undefined = q.days.length ? [shortDate(q.days[0].date), "Today"] : undefined;
+  const labels: [string, string] | undefined = shown.length ? [shortDate(shown[0].date), "Today"] : undefined;
+  const max = Math.max(40, Math.ceil((Math.max(c?.atl ?? 0, c?.optimal?.[1] ?? 30) * 1.4) / 10) * 10);
+  const statusColor = c?.status === "Productive" ? colors.recovery : c?.status === "Overreaching" || c?.status === "Overload" ? colors.recoveryAmber : colors.cardio;
 
   return (
     <View style={styles.screen}>
       <Backdrop glow="fitness" />
       <ScrollView contentContainerStyle={{ paddingBottom: spacing.xxl }}>
-        <DetailHeader title="Cardio load" subtitle="Fatigue against your fitness base" />
+        <DetailHeader title="Cardio load" subtitle={latest ? longDayLabel(latest.date) : undefined} />
         <View style={styles.body}>
           <View style={styles.hero}>
-            <Gauge
-              title="Cardio"
-              value={c ? Math.round(c.atl) : null}
-              min={0}
-              max={Math.max(40, Math.ceil((Math.max(c?.atl ?? 0, c?.optimal?.[1] ?? 30) * 1.4) / 10) * 10)}
-              optimal={c?.optimal ? [Math.round(c.optimal[0]), Math.round(c.optimal[1])] : [0, 0]}
-              status={c?.status ?? null}
-              color={colors.cardio}
-              size={220}
+            <Dial
+              progress={c ? c.atl / max : null}
+              value={c ? `${Math.round(c.atl)}` : "–"}
+              caption={c?.status ?? "No load yet"}
+              color={statusColor}
+              size={200}
+              stroke={12}
+              hatched={!c}
+              band={c?.optimal ? [c.optimal[0] / max, c.optimal[1] / max] : null}
             />
+            <Text style={styles.heroSub}>
+              {c?.optimal ? `Optimal ${Math.round(c.optimal[0])}–${Math.round(c.optimal[1])} · the mint arc` : "Optimal range appears with a fitness base"}
+            </Text>
           </View>
 
-          <View style={styles.statRow}>
-            <Surface style={styles.stat}><Text style={styles.statLabel}>FATIGUE</Text><Text style={styles.statVal}>{c ? c.atl.toFixed(0) : "–"}</Text><Text style={styles.method}>7-day</Text></Surface>
-            <Surface style={styles.stat}><Text style={styles.statLabel}>FITNESS</Text><Text style={styles.statVal}>{c ? c.ctl.toFixed(0) : "–"}</Text><Text style={styles.method}>42-day</Text></Surface>
-            <Surface style={styles.stat}><Text style={styles.statLabel}>FORM</Text><Text style={[styles.statVal, { color: c && c.tsb < -10 ? colors.recoveryAmber : colors.text }]}>{c ? `${c.tsb > 0 ? "+" : ""}${c.tsb.toFixed(0)}` : "–"}</Text><Text style={styles.method}>fitness − fatigue</Text></Surface>
-          </View>
+          <Surface style={styles.card}>
+            <View style={styles.statRow}>
+              <View style={styles.stat}><Text style={styles.statVal}>{c ? c.atl.toFixed(0) : "–"}</Text><Text style={styles.method}>Fatigue · 7-day</Text></View>
+              <View style={styles.stat}><Text style={styles.statVal}>{c ? c.ctl.toFixed(0) : "–"}</Text><Text style={styles.method}>Fitness · 42-day</Text></View>
+              <View style={styles.stat}>
+                <Text style={[styles.statVal, { color: c && c.tsb < -10 ? colors.recoveryAmber : colors.text }]}>{c ? `${c.tsb > 0 ? "+" : ""}${c.tsb.toFixed(0)}` : "–"}</Text>
+                <Text style={styles.method}>Form</Text>
+              </View>
+            </View>
+          </Surface>
 
-          <SectionLabel title="Fatigue vs fitness" note="last 90 days" />
+          <SectionLabel title="Fatigue vs fitness" note={shown.length ? `last ${shown.length} days` : undefined} />
           <Surface style={styles.card}>
             <LineChart
               id="cl-atl"
@@ -115,11 +129,11 @@ export default function CardioLoadScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   body: { paddingHorizontal: spacing.lg },
-  hero: { alignItems: "center", marginBottom: spacing.md },
-  statRow: { flexDirection: "row", gap: 8, marginBottom: spacing.sm },
-  stat: { flex: 1, gap: 2 },
-  statLabel: { ...font.overline, fontSize: 10, color: colors.textFaint },
-  statVal: { fontFamily: fonts.numeral, fontSize: 26, color: colors.text },
+  hero: { alignItems: "center", marginBottom: spacing.lg, gap: 8 },
+  heroSub: { ...font.label, color: colors.textMuted },
+  statRow: { flexDirection: "row" },
+  stat: { flex: 1 },
+  statVal: { fontFamily: fonts.numeral, fontSize: 24, color: colors.text },
   method: { ...font.caption, color: colors.textFaint },
   card: { marginBottom: spacing.md, gap: 10 },
   cardTitle: { ...font.heading, fontSize: 15, color: colors.text },
