@@ -100,6 +100,7 @@ export default function HomeScreen() {
   const WeatherIcon = weather.data && weather.data.code >= 3 ? CloudIcon : SunIcon;
   const rhr = today?.daily.rhr ?? null;
   const vit = today?.vitals ?? {};
+  const nEvents = (today?.sleep ? 1 : 0) + (today?.activities.length ?? 0);
   const asleep = today?.sleep?.asleep_s ?? null;
   const hrvSeries = q.days.map((d) => ((d.scores.recovery?.components as { hrv_ms?: number } | null)?.hrv_ms ?? null));
   const rhrSeries = q.days.map((d) => d.daily.rhr);
@@ -259,7 +260,7 @@ export default function HomeScreen() {
         ]}
       />
 
-      <SectionLabel title="Timeline" note={`${(today?.sleep ? 1 : 0) + (today?.activities.length ?? 0)} events`} />
+      <SectionLabel title="Timeline" note={`${nEvents} event${nEvents === 1 ? "" : "s"}`} />
       {today?.sleep ? <TimelineSleepCard end={today.sleep.end} score={sleep?.value ?? null} asleepS={today.sleep.asleep_s} /> : null}
       {(today?.activities ?? []).map((a) => <WorkoutCard key={a.id} a={a} />)}
 

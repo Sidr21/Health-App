@@ -14,6 +14,7 @@ interface Props {
   status?: string | null;
   color: string;
   size?: number;
+  onPress?: () => void;
 }
 
 function polar(cx: number, cy: number, r: number, deg: number) {
@@ -29,7 +30,7 @@ function arc(cx: number, cy: number, r: number, a0: number, a1: number) {
 }
 
 /** Bevel's training-load arc gauge: tick marks, an "optimal" band, a marker dot, status word. */
-export function Gauge({ title, value, min, max, optimal, status, color, size = 150 }: Props) {
+export function Gauge({ title, value, min, max, optimal, status, color, size = 150, onPress }: Props) {
   const cx = size / 2;
   const cy = size * 0.56;
   const r = size * 0.4;
@@ -41,7 +42,7 @@ export function Gauge({ title, value, min, max, optimal, status, color, size = 1
   const mark = vA == null ? null : polar(cx, cy, r, vA);
   const gid = `gauge${title.replace(/\W/g, "")}`;
   return (
-    <Surface style={[styles.card, { width: "48%" }]}>
+    <Surface style={[styles.card, { width: "48%" }]} onPress={onPress}>
       <Text style={styles.title}>{title}</Text>
       <Text style={[styles.status, { color }]}>{status ?? "–"}</Text>
       <Svg width={size} height={size * 0.78} style={{ alignSelf: "center" }}>
