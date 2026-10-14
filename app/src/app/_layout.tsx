@@ -58,6 +58,7 @@ export default function RootLayout() {
             <Stack.Screen name="cardio-load" />
             <Stack.Screen name="bioage" />
             <Stack.Screen name="races" />
+            <Stack.Screen name="connections" />
             <Stack.Screen name="vital/[metric]" />
           </Stack>
         </QueryClientProvider>

@@ -229,6 +229,13 @@ export interface SyncStateOut {
   coros_auth: boolean;
 }
 
+export interface ConnectionsOut {
+  coros: { connected: boolean; last_sync: string | null; newest_activity: string | null; sync: SyncStateOut };
+  apple_health: { last_sample: string | null; metrics: { metric: string; samples: number; latest: string | null }[]; sleep_nights: number };
+  strength: { source: string; sets: number; latest: string | null }[];
+  server: { version: string; public: boolean; tz: string };
+}
+
 export interface ValueAt {
   value: number;
   date: string;
@@ -377,6 +384,16 @@ export const api = {
   zones: () => request<ZonesOut>("/zones"),
   syncState: () => request<SyncStateOut>("/sync/state"),
   syncNow: () => request<SyncStateOut>("/sync", { method: "POST" }),
+  connections: () => request<ConnectionsOut>("/connections"),
+  corosLoginStart: (returnTo?: string) =>
+    request<{ auth_url: string; callback_url: string }>("/connect/coros/start", { method: "POST", body: JSON.stringify({ return_to: returnTo }) }),
+  corosDisconnect: () => request<{ removed: boolean; connected: boolean }>("/connect/coros", { method: "DELETE" }),
+  importStrengthCsv: (csv: string, unit: "lb" | "kg") =>
+    request<{ source: string; sets: number; sessions: number }>(`/import/strength-csv?unit=${unit}`, {
+      method: "POST",
+      body: csv,
+      headers: { "Content-Type": "text/csv" },
+    }),
   races: () => request<RaceOut[]>("/races"),
   addRace: (body: { date: string; distance_m: number; time_s: number; name?: string }) =>
     request<RaceOut>("/races", { method: "POST", body: JSON.stringify(body) }),

@@ -7,8 +7,7 @@ import { Backdrop } from "@/components/Backdrop";
 import { DetailHeader } from "@/components/DetailHeader";
 import { SectionLabel } from "@/components/SectionLabel";
 import { Surface } from "@/components/Surface";
-import { API_URL, api, type SettingsIn, type SettingsOut, type SyncStateOut } from "@/lib/api";
-import { enableBackgroundDelivery, healthKitAvailable, requestHealthKitAccess, syncHealthKit } from "@/lib/healthkit";
+import { API_URL, api, type SettingsIn, type SettingsOut } from "@/lib/api";
 import { height as fmtHeight, setUnits } from "@/lib/units";
 import { zoneBasisLabel } from "@/lib/zones";
 import { colors, font, fonts, radius, spacing } from "@/theme/tokens";
@@ -96,14 +95,6 @@ function HrMaxSetter({ setValue, onSave, onClear }: { setValue: number | null; o
   );
 }
 
-function syncLine(s: SyncStateOut | undefined): string {
-  if (!s) return "Background sync: unknown";
-  if (!s.enabled) return "Background sync is off on this server (it runs on the cloud deploy).";
-  if (!s.coros_auth) return "Background sync is on, but this server has no COROS login yet.";
-  const last = s.last_finished ? `last run ${ago(s.last_finished)}${s.last_ok ? "" : " (failed)"}` : "first run pending";
-  return `Syncs every ${s.interval_min} min · ${last}`;
-}
-
 function ago(iso: string | null): string {
   if (!iso) return "never";
   const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
@@ -116,24 +107,9 @@ export default function SettingsScreen() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["settings"], queryFn: api.settings });
   const st = q.data;
-  const [log, setLog] = useState("");
   const [now] = useState(() => Date.now());
 
-  const sync = useQuery({
-    queryKey: ["sync-state"],
-    queryFn: api.syncState,
-    refetchInterval: (query) => (query.state.data?.running ? 3000 : 60_000),
-  });
-  const syncNow = useMutation({
-    mutationFn: api.syncNow,
-    onSuccess: (data) => qc.setQueryData(["sync-state"], data),
-  });
-  const wasRunning = React.useRef(false);
-  React.useEffect(() => {
-    // a run just finished: everything on screen may have new data
-    if (wasRunning.current && sync.data && !sync.data.running) qc.invalidateQueries();
-    wasRunning.current = !!sync.data?.running;
-  }, [sync.data, qc]);
+  const sync = useQuery({ queryKey: ["sync-state"], queryFn: api.syncState });
 
   const save = useMutation({
     mutationFn: (body: SettingsIn) => api.putSettings(body),
@@ -143,19 +119,6 @@ export default function SettingsScreen() {
       qc.invalidateQueries(); // units, HRmax and zones change what other screens show
     },
   });
-
-  const connectHealth = async () => {
-    try {
-      if (!(await healthKitAvailable())) return setLog("Apple Health is only available in the iPhone build, not in this web preview.");
-      if (!(await requestHealthKitAccess())) return setLog("Permission request did not complete.");
-      await enableBackgroundDelivery();
-      const r = await syncHealthKit();
-      setLog(`Synced ${r.types} types: ${r.stored} new, ${r.skipped} already stored.`);
-      qc.invalidateQueries();
-    } catch (e) {
-      setLog(String(e));
-    }
-  };
 
   const age = st?.profile.dob ? Math.floor((now - new Date(st.profile.dob).getTime()) / (365.25 * 86_400_000)) : null;
   const need = st?.sleep_need_min ?? 480;
@@ -239,24 +202,12 @@ export default function SettingsScreen() {
             </Row>
           </Surface>
 
-          <SectionLabel title="Data sources" />
-          <Surface style={styles.card}>
-            <Row label="COROS" hint={`Last sync ${ago(st?.sources.coros_last_sync ?? null)} · newest workout ${ago(st?.sources.newest_activity ?? null)}`}>
-              <View style={[styles.dot, { backgroundColor: sync.data?.last_ok === false ? colors.recoveryRed : st?.sources.coros_last_sync ? colors.recovery : colors.recoveryAmber }]} />
+          <SectionLabel title="Data" />
+          <Surface style={styles.card} onPress={() => router.push("/connections")}>
+            <Row label="Connections" hint={`COROS ${sync.data?.coros_auth ? "connected" : "not connected"} · Apple Health ${st?.sources.apple_last_sample ? `synced ${ago(st.sources.apple_last_sample)}` : "not connected"}`}>
+              <Text style={styles.candVal}>›</Text>
             </Row>
-            <Text style={styles.hint}>{syncLine(sync.data)}</Text>
-            {sync.data?.last_error ? <Text style={[styles.hint, { color: colors.recoveryAmber }]}>{sync.data.last_error}</Text> : null}
-            <Pressable onPress={() => syncNow.mutate()} disabled={sync.data?.running || syncNow.isPending} style={[styles.btn, (sync.data?.running || syncNow.isPending) && { opacity: 0.5 }]}>
-              <Text style={styles.btnText}>{sync.data?.running ? "Syncing…" : "Sync COROS now"}</Text>
-            </Pressable>
-            <Row label="Apple Health" hint={`Newest sample ${ago(st?.sources.apple_last_sample ?? null)}`}>
-              <View style={[styles.dot, { backgroundColor: st?.sources.apple_last_sample ? colors.recovery : colors.textFaint }]} />
-            </Row>
-            <Pressable onPress={connectHealth} style={[styles.btn, { marginTop: spacing.sm }]}>
-              <Text style={styles.btnText}>Connect Apple Health & sync now</Text>
-            </Pressable>
-            {log ? <Text style={styles.hint}>{log}</Text> : null}
-            <Text style={[styles.hint, { marginTop: spacing.md }]}>Backend {API_URL} · time zone {st?.timezone ?? "–"}</Text>
+            <Text style={[styles.hint, { marginTop: spacing.sm }]}>Backend {API_URL} · time zone {st?.timezone ?? "–"}</Text>
           </Surface>
           {save.isError ? <Text style={styles.error}>Could not save: {String(save.error)}</Text> : null}
         </View>

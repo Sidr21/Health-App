@@ -68,9 +68,11 @@ address; every endpoint except `/health` needs the API token, and with `HEALTH_P
 (set in `fly.toml`) it refuses to start if the token is missing, a placeholder or shorter than
 24 characters.
 
-**Before you start:** `uv run health coros auth` must have worked on the Mac, so
-`backend/data/coros_oauth.json` exists. The server can't open a browser to log in itself; it
-starts from that token and keeps refreshing it.
+**COROS login, two ways.** Easiest: deploy first, then in the app open Settings → Connections →
+**Connect COROS**. The server runs the login itself, the COROS page opens on the phone, and
+the server keeps the token and refreshes it. If the COROS page refuses the server's callback
+address, use the Mac instead: run `uv run health coros auth` (it creates
+`backend/data/coros_oauth.json`) and pass that file in the `fly secrets set` line below.
 
 ```bash
 curl -L https://fly.io/install.sh | sh        # or: brew install flyctl
@@ -79,7 +81,8 @@ cd backend
 fly launch --copy-config --no-deploy          # uses fly.toml; pick another app name if taken
 fly volumes list                              # if no health_data volume is listed:
 fly volumes create health_data --size 1 --region ewr --yes
-fly secrets set HEALTH_API_TOKEN=<same token as app/.env> HEALTH_COROS_TOKEN_JSON="$(cat data/coros_oauth.json)"
+fly secrets set HEALTH_API_TOKEN=<same token as app/.env>
+# only for the Mac login: fly secrets set HEALTH_COROS_TOKEN_JSON="$(cat data/coros_oauth.json)"
 fly deploy
 ```
 

@@ -18,3 +18,13 @@ export function dayLabel(iso: string): string {
   const d = new Date(`${iso}T00:00:00`);
   return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }
+
+/** "12 min ago", "3 h ago", else a short date; "never" for null. */
+export function timeAgo(iso: string | null | undefined, now = Date.now()): string {
+  if (!iso) return "never";
+  const mins = Math.round((now - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  if (mins < 48 * 60) return `${Math.round(mins / 60)} h ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
