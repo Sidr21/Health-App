@@ -59,7 +59,75 @@ npx expo run:ios --device          # pick your iPhone; first build takes 5–15 
 
 In the app: open Settings → "Connect Apple Health & sync now", allow the body-measurement types.
 
-## 3. Cloud backend (Fly.io)
+## 3. Cloud backend (Google Cloud, free)
+A free e2-micro VM runs the API and the COROS sync around the clock: the last 3 days every
+15 minutes and 30 days once a night, each followed by a recompute. Settings in the app shows
+the last run and has a "Sync COROS now" button. The phone reaches the VM through
+[Tailscale](https://tailscale.com) (free), so nothing on the VM is open to the internet. The
+database is copied every night (kept 14 days).
+
+**Before you start:** `uv run health coros auth` must have worked on the Mac, so
+`backend/data/coros_oauth.json` exists. The VM can't open a browser to log in; it starts from
+that token and keeps refreshing it.
+
+**1. Create the VM** at [console.cloud.google.com](https://console.cloud.google.com):
+- New project (e.g. `health`), then turn on billing. The free tier needs a card but doesn't
+  charge for what's below.
+- Compute Engine → VM instances → Create instance:
+  - Region **us-east1**, **us-central1** or **us-west1** (only these are free); any zone.
+  - Machine type **e2-micro**.
+  - Boot disk: **Debian 12**, disk type **Standard persistent disk**, **30 GB**. The default
+    "Balanced" disk is not free.
+  - Leave the firewall boxes (HTTP/HTTPS traffic) unticked.
+- Billing → Budgets & alerts → a **$1 budget** with email alerts, so any charge outside the
+  free tier (for example the VM's external IP) shows up in days, not months.
+
+**2. Install the backend.** Click **SSH** next to the VM (opens a terminal in the browser):
+```bash
+curl -fsSL https://raw.githubusercontent.com/Sidr21/Health-App/claude/design-gameplan/deploy/gcp/setup-vm.sh | sudo bash
+```
+It asks for `HEALTH_API_TOKEN` (the same token as in `app/.env`), installs Docker and
+Tailscale, builds and starts the API. Settings live in `/etc/health/backend.env`, data in
+`/var/lib/health`.
+
+**3. Connect Tailscale.** Install Tailscale on the iPhone (App Store) and log in. On the VM:
+```bash
+sudo tailscale up --hostname=health --ssh     # open the printed link and log in with the same account
+sudo tailscale serve --bg 8000                # prints https://health.<your-tailnet>.ts.net
+```
+If `serve` says HTTPS isn't enabled, open the link it gives and enable it, then run it again.
+
+**4. Give the VM your COROS login.** In the browser SSH window use **Upload file** (gear or
+upload icon, top right) and pick `backend/data/coros_oauth.json` from the Mac, then:
+```bash
+sudo install -m 600 ~/coros_oauth.json /var/lib/health/coros_oauth.json && rm ~/coros_oauth.json
+```
+The next sync (within 15 minutes) picks it up. Check it with
+`curl -s -H "Authorization: Bearer <token>" http://127.0.0.1:8000/sync/state`.
+
+**5. Bring your existing history (optional).** Upload `backend/data/health.db` the same way, then:
+```bash
+cd /opt/health-app && sudo docker compose -f deploy/gcp/compose.yml stop
+sudo install -m 600 ~/health.db /var/lib/health/health.db && rm ~/health.db
+sudo docker compose -f deploy/gcp/compose.yml start
+```
+
+**6. Point the phone at it.** In `app/.env` set `EXPO_PUBLIC_API_URL=https://health.<your-tailnet>.ts.net`
+and restart the dev server (`npx expo start --dev-client --clear`). The phone needs the
+Tailscale app connected (it can stay on in the background); the Mac can be off.
+
+**Day to day**
+- Update to the latest code: `sudo /opt/health-app/deploy/gcp/update.sh`
+- Logs: `sudo docker compose -f /opt/health-app/deploy/gcp/compose.yml logs -f --tail 100`
+- Backups: `/var/lib/health/backups/health-YYYY-MM-DD.db`
+- COROS logged you out: run `uv run health coros auth` on the Mac again and repeat step 4.
+
+Free-tier limits: one e2-micro in those three regions, 30 GB standard disk, 1 GB of outbound
+traffic a month (the sync and the app use far less). Google's terms change; the $1 budget alert
+is there to catch it if they do.
+
+## 4. Alternative: Fly.io (~$3–4/month, fully managed)
+No server to maintain, automatic volume snapshots and a public HTTPS URL; you pay for that.
 One always-on machine runs the API and the COROS sync: a quick sync of the last 3 days every
 15 minutes, plus a 30-day sync once a night after 4 am, each followed by a recompute. Settings
 in the app shows the last run and has a "Sync COROS now" button. Cost: about $3–4 a month

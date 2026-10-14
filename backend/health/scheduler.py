@@ -45,8 +45,8 @@ class SyncState:
 
 state = SyncState()
 NO_AUTH = (
-    "no COROS login on this server: run `health coros auth` on a Mac and set "
-    "HEALTH_COROS_TOKEN_JSON (docs/SETUP.md §3)"
+    "no COROS login on this server: run `health coros auth` on a Mac and copy "
+    "data/coros_oauth.json to the server (docs/SETUP.md §3)"
 )
 _tasks: set[asyncio.Task] = set()  # strong refs so background runs aren't garbage-collected
 

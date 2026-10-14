@@ -1,5 +1,5 @@
 # Fly.io deploy for the backend: one always-on machine + a 1 GB volume for SQLite, raw files
-# and the COROS token. Steps in docs/SETUP.md §3. Run `fly deploy` from this directory.
+# and the COROS token. Steps in docs/SETUP.md §4 (the free Google Cloud setup in §3 is the default). Run `fly deploy` from this directory.
 app = "health-sidr21"            # must be unique on Fly: change it if `fly launch` says taken
 primary_region = "ewr"           # New Jersey, closest to New York
 

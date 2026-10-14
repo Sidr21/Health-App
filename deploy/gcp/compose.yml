@@ -1,0 +1,18 @@
+# Backend on a Google Cloud e2-micro VM (docs/SETUP.md §3). Installed by setup-vm.sh.
+# The API listens on localhost only; the phone reaches it through Tailscale (`tailscale serve`),
+# so nothing is exposed to the internet.
+services:
+  api:
+    build: ../../backend
+    env_file: /etc/health/backend.env
+    environment:
+      HEALTH_DATA_DIR: /data
+      HEALTH_DATABASE_URL: sqlite:////data/health.db
+    volumes:
+      - /var/lib/health:/data
+    ports:
+      - "127.0.0.1:8000:8000"
+    restart: always
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
