@@ -27,9 +27,11 @@ Hub API implementation described in `docs/DESIGN.md` §3.1.
 Manual import without the MCP (works today): paste a tool output from Claude into a file and run
 `uv run health coros import querySleepHrv path/to/file.txt`.
 
-Workout files: `health coros sync` downloads up to 10 new FIT files per run (`--fit-limit N`);
-COROS caps daily downloads, so a 12-month backfill finishes over a few days of runs. A single file
-can be imported with `uv run health fit path/to/file.fit --label-id <COROS labelId>`.
+Workout files: `health coros sync` downloads up to 30 new FIT files per run (`--fit-limit N`),
+runs first. COROS allows 50 FIT files per account per day (asking for a download link counts),
+so a long backfill takes a few days; each run only fetches what is still missing. For older
+history, export FIT files from t.coros.com and import one with
+`uv run health fit path/to/file.fit --label-id <COROS labelId>`.
 
 Lifting from other apps: export from Strong (Settings → Export data) or Hevy (Settings → Export &
 import data → Export workouts) and run `uv run health strength import export.csv` (add `--unit kg`

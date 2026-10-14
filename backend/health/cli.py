@@ -69,7 +69,7 @@ def coros_call(tool: str, args: str = "{}") -> None:
 
 
 @coros.command("sync")
-def coros_sync(days: int = 30, laps: bool = True, fit_limit: int = 10) -> None:
+def coros_sync(days: int = 30, laps: bool = True, fit_limit: int = 30) -> None:
     """Pull the last N days from COROS and store them, then recompute scores.
 
     Downloads at most FIT_LIMIT new FIT files per run (COROS caps daily downloads); files
@@ -157,7 +157,7 @@ def coros_fit_check(
     with session_scope() as s:
         compute_range(s, today_local() - timedelta(days=1), today_local())
     typer.echo("4. stored and today's models refitted.")
-    typer.echo("   `uv run health coros sync --days 90` fetches the rest, 10 a run (COROS caps")
+    typer.echo("   `uv run health coros sync --days 90` fetches the rest, 30 a run (COROS caps")
     typer.echo("   FIT downloads per day).")
 
 
