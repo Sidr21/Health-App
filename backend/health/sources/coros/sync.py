@@ -12,10 +12,12 @@ from health.config import today_local
 from health.db import session_scope
 from health.models import Activity
 from health.sources.coros.mcp_client import CorosMcp
+from health.sources.coros.parsers import SportRecord
 from health.sources.coros.store import import_text, log
 from health.sources.fit import store_fit
 
 _SPORT_ALL = [65535]
+RUN_TYPES = {100, 101, 102, 103}  # outdoor, indoor (treadmill), trail, track run
 
 
 def _yyyymmdd(d: date) -> str:
@@ -108,31 +110,40 @@ async def sync_all(
             counts["querySportRecords"] = import_text(s, "querySportRecords", records_text)
             from health.sources.coros.parsers import parse_sport_records
 
+            fit_wanted: list[tuple[Activity, SportRecord]] = []
             for r in parse_sport_records(records_text):
+                # each step on its own: a detail or lap reply we can't parse must not cost the
+                # activity its FIT file (the stream is what the models need most)
+                for tool in ("getActivityDetail", "queryActivityLapData")[: 2 if with_laps else 1]:
+                    try:
+                        text = await c.call(
+                            tool, {"labelId": r.label_id, "sportType": r.sport_type}
+                        )
+                        import_text(s, tool, text, label_id=r.label_id)
+                    except Exception as e:
+                        log(s, f"{tool}:{r.label_id}", False, f"{type(e).__name__}: {e}"[:500])
+                act = s.execute(
+                    select(Activity).where(
+                        Activity.source == "coros", Activity.external_id == r.label_id
+                    )
+                ).scalar_one_or_none()
+                if act is not None and not act.fit_path:
+                    fit_wanted.append((act, r))
+            # COROS caps FIT downloads per day (asking for the URL counts): spend them on runs
+            # first, whose streams the fitness models need, newest first; then everything else
+            fit_wanted.sort(
+                key=lambda ar: (ar[1].sport_type not in RUN_TYPES, -ar[1].date.toordinal())
+            )
+            stored = 0
+            for act, r in fit_wanted[: max(0, fit_limit)]:
                 try:
-                    det = await c.call(
-                        "getActivityDetail", {"labelId": r.label_id, "sportType": r.sport_type}
-                    )
-                    import_text(s, "getActivityDetail", det, label_id=r.label_id)
-                    if with_laps:
-                        laps = await c.call(
-                            "queryActivityLapData",
-                            {"labelId": r.label_id, "sportType": r.sport_type},
-                        )
-                        import_text(s, "queryActivityLapData", laps, label_id=r.label_id)
-                    act = s.execute(
-                        select(Activity).where(
-                            Activity.source == "coros", Activity.external_id == r.label_id
-                        )
-                    ).scalar_one_or_none()
-                    if act is not None and not act.fit_path and fit_limit > 0:
-                        fit_limit -= 1  # the URL request itself counts against COROS's daily cap
-                        data = await _download_fit(c, r.label_id, r.sport_type)
-                        counts["fit"] = counts.get("fit", 0) + store_fit(s, act, data)
-                        log(s, f"fit:{r.label_id}", True)
+                    data = await _download_fit(c, r.label_id, r.sport_type)
+                    counts["fit_samples"] = counts.get("fit_samples", 0) + store_fit(s, act, data)
+                    stored += 1
+                    log(s, f"fit:{r.label_id}", True)
                 except Exception as e:
-                    counts["fit_failed"] = counts.get("fit_failed", 0) + isinstance(
-                        e, FitDownloadError
-                    )
-                    log(s, f"activity:{r.label_id}", False, f"{type(e).__name__}: {e}"[:500])
+                    counts["fit_failed"] = counts.get("fit_failed", 0) + 1
+                    log(s, f"fit:{r.label_id}", False, f"{type(e).__name__}: {e}"[:500])
+            counts["fit"] = stored
+            counts["fit_still_missing"] = len(fit_wanted) - stored
     return counts
