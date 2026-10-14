@@ -173,12 +173,13 @@ function Meta({ icon: Icon, text }: { icon: ComponentType<IconProps>; text: stri
 }
 
 /** Timeline row for the main sleep. Used on Home (with the timeline button) and on the Sleep screen. */
-export function TimelineSleepCard({ end, score, asleepS, tone = "card", button = true }: { end: string | null; score: number | null; asleepS: number | null; tone?: SurfaceTone; button?: boolean }) {
+/** The night's sleep; `date` (a past day) carries through to the sleep screens. */
+export function TimelineSleepCard({ date, end, score, asleepS, tone = "card", button = true }: { date?: string; end: string | null; score: number | null; asleepS: number | null; tone?: SurfaceTone; button?: boolean }) {
   const time = end ? new Date(end).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "–";
   const h = asleepS != null ? `${Math.floor(asleepS / 3600)}h ${String(Math.round((asleepS % 3600) / 60)).padStart(2, "0")}m` : "–";
   return (
     <Surface tone={tone} style={styles.card}>
-      <Pressable onPress={() => router.push("/sleep/night")} style={styles.rowCenter}>
+      <Pressable onPress={() => router.push(date ? { pathname: "/sleep/night", params: { date } } : "/sleep/night")} style={styles.rowCenter}>
         <View style={styles.moonWrap}><MoonIcon size={18} color={colors.sleep} /></View>
         <View style={{ flex: 1, marginLeft: 10 }}>
           <Text style={styles.metaText}>Woke {time}</Text>
@@ -191,7 +192,7 @@ export function TimelineSleepCard({ end, score, asleepS, tone = "card", button =
         <ArrowRight size={16} color={colors.textMuted} />
       </Pressable>
       {button ? (
-        <Pressable onPress={() => router.push("/sleep")} style={styles.button}>
+        <Pressable onPress={() => router.push(date ? { pathname: "/sleep", params: { date } } : "/sleep")} style={styles.button}>
           <Text style={styles.buttonText}>View timeline</Text>
         </Pressable>
       ) : null}

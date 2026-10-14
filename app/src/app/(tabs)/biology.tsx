@@ -18,6 +18,7 @@ import { api } from "@/lib/api";
 import { bmiCategory, bodyDelta, bodyValue, displaySeries, type BodyKey } from "@/lib/body";
 import { hms } from "@/lib/format";
 import { flagColor, flagLabel, shown } from "@/lib/labs";
+import { useRefresh } from "@/lib/refresh";
 import { useDays } from "@/lib/useDays";
 import { colors, font, fonts, spacing } from "@/theme/tokens";
 
@@ -121,13 +122,14 @@ function LabsCard() {
 }
 
 export default function BiologyScreen() {
+  const refresh = useRefresh();
   const [menu, setMenu] = useState(false);
   const q = useDays(28);
   const latest = q.days[q.days.length - 1];
   const comps = (latest?.scores.recovery?.components ?? {}) as { hrv_ms?: number };
   const body = useQuery({ queryKey: ["body"], queryFn: () => api.bodySummary(365) });
   return (
-    <Screen refreshing={q.isFetching} onRefresh={() => q.refetch()}>
+    <Screen refreshing={refresh.refreshing} onRefresh={refresh.onRefresh} notices={refresh.problems}>
       <Header centered title="Biology" left={<View style={{ width: 44 }} />} right={<RoundButton onPress={() => setMenu(true)}><DotsIcon size={20} color={colors.text} /></RoundButton>} />
       <SectionLabel title="Vitals" note="last 28 days" />
       <View style={styles.grid}>

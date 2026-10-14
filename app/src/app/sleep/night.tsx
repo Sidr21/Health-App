@@ -1,3 +1,4 @@
+import { useLocalSearchParams } from "expo-router";
 import React from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
@@ -10,18 +11,22 @@ import { BedIcon, ClockIcon, HeartIcon, MoonIcon, PulseIcon, ZzzIcon } from "@/c
 import { Ring } from "@/components/Ring";
 import { GradeCell, Panel, gradeFor } from "@/components/Tiles";
 import { hms } from "@/lib/format";
-import { useDays } from "@/lib/useDays";
+import { todayIso, useDays } from "@/lib/useDays";
 import { colors, font, radius, spacing } from "@/theme/tokens";
 
 export default function PrimarySleepScreen() {
-  const q = useDays(3);
-  const today = q.days[q.days.length - 1];
+  const { date: param } = useLocalSearchParams<{ date?: string }>();
+  const date = param ?? todayIso(); // the day the night ends on (as on Home and Sleep)
+  const q = useDays(1, date);
+  const today = q.byDate.get(date);
   const s = today?.sleep;
   const sc = today?.scores.sleep;
   const comps = (sc?.components ?? {}) as Record<string, number>;
   const score = sc?.value ?? null;
   const fmt = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "–");
-  const startLabel = s?.start ? `${new Date(s.start).toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "2-digit" })} at ${fmt(s.start)}` : "";
+  const nightOf = new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+  const startLabel = s?.start ? `${new Date(s.start).toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "2-digit" })} at ${fmt(s.start)}` : `Night ending ${nightOf}`;
+  const hasStages = [s?.deep_s, s?.light_s, s?.rem_s, s?.awake_s].some((v) => v != null) || (s?.segments ?? []).length > 0;
   const remFrac = s?.rem_s != null && s.asleep_s ? Math.min(1, s.rem_s / s.asleep_s / 0.25) : null;
   const deepFrac = s?.deep_s != null && s.asleep_s ? Math.min(1, s.deep_s / s.asleep_s / 0.2) : null;
   const segments = s?.segments ?? [];
@@ -40,6 +45,15 @@ export default function PrimarySleepScreen() {
         <View style={styles.body}>
           <Text style={styles.title}>Primary sleep</Text>
           <Text style={styles.subtitle}>{startLabel}</Text>
+
+          {!q.isLoading && !s ? (
+            <Panel tone="sleep" style={{ marginTop: spacing.lg }}>
+              <Text style={styles.rowText}>No sleep recorded for this night</Text>
+              <Text style={[styles.caption, { marginTop: 6, marginBottom: 0 }]}>
+                {q.isError ? `Cannot reach the backend (${String(q.error)}).` : "COROS hasn't sent this night yet. Pull down on Home to sync, or pick another night from the Sleep screen."}
+              </Text>
+            </Panel>
+          ) : null}
 
           <Surface tone="sleep" style={[styles.rowCard, { marginTop: spacing.lg }]}>
             <Text style={styles.rowText}>Sleep Score</Text>
@@ -82,9 +96,13 @@ export default function PrimarySleepScreen() {
                 { stage: "awake", seconds: stageSecs.awake, typical: "< 10%" },
               ]}
             />
-            {!segments.length ? (
+            {s && !hasStages ? (
               <Text style={[styles.caption, { marginTop: spacing.md, marginBottom: 0 }]}>
-                The minute-by-minute timeline appears once the iPhone app shares Apple Health sleep stages. COROS only reports totals.
+                COROS didn&apos;t report stage totals for this night, and Apple Health has no sleep stages for it.
+              </Text>
+            ) : !segments.length ? (
+              <Text style={[styles.caption, { marginTop: spacing.md, marginBottom: 0 }]}>
+                The minute-by-minute timeline needs sleep stages in Apple Health (from the COROS app&apos;s Health sharing or an Apple Watch). COROS itself only reports totals.
               </Text>
             ) : null}
           </Panel>

@@ -13,6 +13,7 @@ import { api } from "@/lib/api";
 import { dayOfMonth, monthLabel, weekOf } from "@/lib/dates";
 import { TAGS, type TagDef } from "@/lib/journal";
 import { todayIso } from "@/lib/useDays";
+import { useRefresh } from "@/lib/refresh";
 import { colors, font, fonts, spacing } from "@/theme/tokens";
 
 type Tri = "no" | "skip" | "yes" | null;
@@ -74,6 +75,7 @@ function EntryRow({ e, value, onChange }: { e: TagDef; value: number | null; onC
 }
 
 export default function JournalScreen() {
+  const refresh = useRefresh();
   const today = todayIso();
   const qc = useQueryClient();
   const [selected, setSelected] = useState(today);
@@ -114,7 +116,7 @@ export default function JournalScreen() {
   const dayName = new Date(`${selected}T00:00:00`).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
 
   return (
-    <Screen refreshing={q.isFetching} onRefresh={() => q.refetch()}>
+    <Screen refreshing={refresh.refreshing} onRefresh={refresh.onRefresh} notices={refresh.problems}>
       <View style={styles.topRow}>
         <Pressable style={styles.insights} onPress={() => router.push("/journal/insights")}>
           <SparkleIcon size={16} color={colors.text} />

@@ -486,7 +486,7 @@ export const api = {
   stressDay: (date: string) => request<StressDayOut>(`/stress/${date}`),
   zones: () => request<ZonesOut>("/zones"),
   syncState: () => request<SyncStateOut>("/sync/state"),
-  syncNow: () => request<SyncStateOut>("/sync", { method: "POST" }),
+  syncNow: (days?: number) => request<SyncStateOut>(days ? `/sync?days=${days}` : "/sync", { method: "POST" }),
   connections: () => request<ConnectionsOut>("/connections"),
   status: () => request<{ status: DayStatus; since: string | null }>("/status"),
   putStatus: (status: DayStatus) =>

@@ -50,14 +50,14 @@ export default function SleepScreen() {
   const [date, setDate] = useState(params.date ?? todayIso());
   const [picking, setPicking] = useState(false);
   const q = useDays(28, date);
-  const today = q.days[q.days.length - 1];
+  const today = q.byDate.get(date);
   const s = today?.sleep;
   const score = today?.scores.sleep?.value ?? null;
   const bedMed = medianMinutes(q.days.slice(-14).map((d) => d.sleep?.start ?? null));
   const wakeMed = medianMinutes(q.days.slice(-14).map((d) => d.sleep?.end ?? null));
   const needS = 8 * 3600;
   const stripe = (fn: (d: (typeof q.days)[number]) => number | null) => q.days.map(fn);
-  const title = new Date(`${today?.date ?? todayIso()}T00:00:00`).toLocaleDateString(undefined, { month: "long", day: "numeric" });
+  const title = new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { month: "long", day: "numeric" });
 
   return (
     <View style={styles.screen}>
@@ -111,7 +111,7 @@ export default function SleepScreen() {
           </Panel>
 
           <SectionLabel title="Sleep timeline" note={s ? "1 event" : "0 events"} />
-          {s ? <TimelineSleepCard end={s.end} score={score} asleepS={s.asleep_s} tone="sleep" button={false} /> : null}
+          {s ? <TimelineSleepCard date={date} end={s.end} score={score} asleepS={s.asleep_s} tone="sleep" button={false} /> : null}
 
           <SectionLabel title="Trends" note="last 28 nights" />
           <MetricCard icon={MoonIcon} title="Sleep Score" value={score != null ? String(Math.round(score)) : "–"} unit="%" status={score != null ? { label: score >= 65 ? "Normal range" : "Below normal", tone: score >= 65 ? "good" : "bad", direction: score >= 65 ? undefined : "down" } : null} series={stripe((d) => d.scores.sleep?.value ?? null)} color={colors.sleep} />

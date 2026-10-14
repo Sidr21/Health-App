@@ -20,9 +20,11 @@ import { sportMeta } from "@/lib/sport";
 import { api } from "@/lib/api";
 import { useStrength } from "@/lib/strength";
 import { todayIso, useDays } from "@/lib/useDays";
+import { useRefresh } from "@/lib/refresh";
 import { colors, font, fonts, spacing } from "@/theme/tokens";
 
 export default function FitnessScreen() {
+  const refresh = useRefresh();
   const q = useDays(120);
   const today = todayIso();
   const models = useQuery({ queryKey: ["fitness-models"], queryFn: api.fitnessModels });
@@ -54,7 +56,7 @@ export default function FitnessScreen() {
   const weekKcal = q.days.filter((d) => week.includes(d.date)).reduce((s, d) => s + d.activities.reduce((t, a) => t + (a.calories ?? 0), 0), 0);
 
   return (
-    <Screen glow="fitness" refreshing={q.isFetching} onRefresh={() => q.refetch()}>
+    <Screen glow="fitness" refreshing={refresh.refreshing} onRefresh={refresh.onRefresh} notices={refresh.problems}>
       <Header
         centered
         title="Fitness"

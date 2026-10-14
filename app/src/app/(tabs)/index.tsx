@@ -19,6 +19,7 @@ import { Surface } from "@/components/Surface";
 import { api, type DayPayload, type DayStatus } from "@/lib/api";
 import { addDays } from "@/lib/dates";
 import { hms, pct } from "@/lib/format";
+import { useRefresh } from "@/lib/refresh";
 import { todayIso, useDays } from "@/lib/useDays";
 import { DEFAULT_LOCATION, fetchWeather } from "@/lib/weather";
 import { bandColor, colors, font, fonts, radius, spacing } from "@/theme/tokens";
@@ -70,6 +71,7 @@ function normal(value: number | null | undefined, base: number | null | undefine
 }
 
 export default function HomeScreen() {
+  const refresh = useRefresh();
   const qc = useQueryClient();
   const now = todayIso();
   const [date, setDate] = useState(now);
@@ -89,7 +91,7 @@ export default function HomeScreen() {
   });
   const status: DayStatus = (isToday ? statusQ.data?.status : today?.status) ?? "active";
   const st = STATUS[status];
-  const at = (pathname: "/strain" | "/recovery" | "/energy" | "/stress") => (isToday ? pathname : { pathname, params: { date } });
+  const at = (pathname: "/strain" | "/recovery" | "/energy" | "/stress" | "/sleep" | "/sleep/night") => (isToday ? pathname : { pathname, params: { date } });
   const workoutDays = useDays(120);
   const marked = new Set(workoutDays.days.filter((d) => d.activities.length).map((d) => d.date));
   const weather = useQuery({ queryKey: ["weather"], queryFn: () => fetchWeather(), staleTime: 30 * 60_000 });
@@ -107,7 +109,7 @@ export default function HomeScreen() {
   const sleepSeries = q.days.map((d) => (d.sleep?.asleep_s != null ? d.sleep.asleep_s / 3600 : null));
 
   return (
-    <Screen refreshing={q.isFetching} onRefresh={() => q.refetch()}>
+    <Screen refreshing={refresh.refreshing} onRefresh={refresh.onRefresh} notices={refresh.problems}>
       <View style={styles.topBar}>
         <View style={styles.topPill}>
           <Pressable style={styles.topBtn} disabled={!today} onPress={() => today && Share.share({ message: shareText(today) })} accessibilityLabel="Share today">
@@ -154,7 +156,7 @@ export default function HomeScreen() {
           <Pressable style={styles.ringCol} onPress={() => router.push(at("/recovery"))}>
             <Dial label="Recovery" progress={rec ? rec.value / 100 : null} value={rec ? pct(rec.value) : "–"} color={bandColor(comps.band)} />
           </Pressable>
-          <Pressable style={styles.ringCol} onPress={() => router.push("/sleep")}>
+          <Pressable style={styles.ringCol} onPress={() => router.push(at("/sleep"))}>
             <Dial label="Sleep" progress={sleep ? sleep.value / 100 : null} value={sleep ? pct(sleep.value) : "–"} color={colors.sleep} />
           </Pressable>
         </View>
@@ -171,7 +173,7 @@ export default function HomeScreen() {
           <Text style={styles.vitalValue}>{rhr ?? "–"}<Text style={styles.vitalUnit}> bpm</Text></Text>
           <Sparkline values={rhrSeries} color={colors.strain} width={84} height={26} band={comps.rhr_base ? { low: comps.rhr_base - 3, high: comps.rhr_base + 3 } : null} />
         </Surface>
-        <Surface style={styles.vital} onPress={() => router.push("/sleep")}>
+        <Surface style={styles.vital} onPress={() => router.push(at("/sleep"))}>
           <Text style={styles.vitalLabel}>Sleep</Text>
           <Text style={styles.vitalValue}>{asleep != null ? hms(asleep) : "–"}</Text>
           <Sparkline values={sleepSeries} color={colors.sleep} width={84} height={26} band={{ low: 7, high: 9 }} />
@@ -217,7 +219,7 @@ export default function HomeScreen() {
           status={asleep != null ? (asleep >= 7 * 3600 ? "Normal" : "Short") : null}
           range={asleep != null ? { v: asleep / 3600, lo: 7, hi: 9, min: 4, max: 11 } : null}
           color={asleep != null && asleep < 7 * 3600 ? colors.recoveryAmber : colors.recovery}
-          onPress={() => router.push("/sleep")}
+          onPress={() => router.push(at("/sleep"))}
         />
         <MonitorTile
           icon={PulseIcon}
@@ -261,7 +263,7 @@ export default function HomeScreen() {
       />
 
       <SectionLabel title="Timeline" note={`${nEvents} event${nEvents === 1 ? "" : "s"}`} />
-      {today?.sleep ? <TimelineSleepCard end={today.sleep.end} score={sleep?.value ?? null} asleepS={today.sleep.asleep_s} /> : null}
+      {today?.sleep ? <TimelineSleepCard date={isToday ? undefined : date} end={today.sleep.end} score={sleep?.value ?? null} asleepS={today.sleep.asleep_s} /> : null}
       {(today?.activities ?? []).map((a) => <WorkoutCard key={a.id} a={a} />)}
 
       <DatePickerSheet key={date} visible={picking} onClose={() => setPicking(false)} value={date} max={now} onChange={setDate} marked={marked} />
