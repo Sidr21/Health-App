@@ -88,6 +88,79 @@ def coros_sync(days: int = 30, laps: bool = True, fit_limit: int = 10) -> None:
     typer.echo(f"recomputed {n} days")
 
 
+@coros.command("fit-check")
+def coros_fit_check(
+    label_id: str | None = typer.Option(
+        None, help="Activity to try; default the newest without a file"
+    ),
+) -> None:
+    """Walk one activity through the FIT download step by step and say where it fails:
+    COROS's reply, the download, the parse, the store. Uses one of COROS's daily downloads."""
+    from sqlalchemy import select
+
+    from health.db import init_db, session_scope
+    from health.models import Activity, SyncLog
+    from health.sources.coros.mcp_client import CorosMcp
+    from health.sources.coros.sync import FitDownloadError, fetch_fit, fit_url
+    from health.sources.fit import parse_fit, store_fit
+
+    init_db()
+    with session_scope() as s:
+        fails = (
+            s.execute(
+                select(SyncLog).where(SyncLog.ok.is_(False)).order_by(SyncLog.ts.desc()).limit(5)
+            )
+            .scalars()
+            .all()
+        )
+        typer.echo("Last sync failures:" if fails else "No sync failures logged.")
+        for f in fails:
+            typer.echo(f"  {f.ts:%Y-%m-%d %H:%M} {f.kind}: {f.detail}")
+        q = select(Activity).where(Activity.source == "coros")
+        q = (
+            q.where(Activity.external_id == label_id)
+            if label_id
+            else q.where(Activity.fit_path.is_(None))
+        )
+        act = s.execute(q.order_by(Activity.start_ts.desc()).limit(1)).scalar_one_or_none()
+        if act is None:
+            raise typer.Exit("no matching COROS activity in the database (run `health coros sync`)")
+        act_id, ext, sport_code = act.id, act.external_id, act.sport_code
+        typer.echo(
+            f"\nActivity {ext} ({act.sport}, {act.start_ts:%Y-%m-%d}), sportType {sport_code}"
+        )
+
+    async def run() -> bytes:
+        async with CorosMcp() as c:
+            reply = await c.call(
+                "queryActivityFitFileDownloadUrls", {"labelId": ext, "sportType": sport_code}
+            )
+        typer.echo(f"1. COROS replied:\n{reply.strip()}")
+        url = fit_url(reply)
+        typer.echo(f"2. downloading {url}")
+        return await fetch_fit(url)
+
+    try:
+        data = asyncio.run(run())
+    except FitDownloadError as e:
+        raise typer.Exit(f"FAILED: {e}") from e
+    typer.echo(f"   got {len(data):,} bytes")
+    parsed = parse_fit(data)
+    hr = sum(1 for x in parsed.samples if x["hr"])
+    typer.echo(
+        f"3. parsed: {len(parsed.samples)} samples, {hr} with heart rate, {len(parsed.laps)} laps"
+    )
+    from health.compute import compute_range
+
+    with session_scope() as s:
+        store_fit(s, s.get(Activity, act_id), data)
+    with session_scope() as s:
+        compute_range(s, today_local() - timedelta(days=1), today_local())
+    typer.echo("4. stored and today's models refitted.")
+    typer.echo("   `uv run health coros sync --days 90` fetches the rest, 10 a run (COROS caps")
+    typer.echo("   FIT downloads per day).")
+
+
 @app.command("fit")
 def fit_import(
     path: Path, label_id: str = typer.Option(..., help="COROS labelId of the activity")

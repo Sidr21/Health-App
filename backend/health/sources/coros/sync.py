@@ -25,17 +25,35 @@ def _yyyymmdd(d: date) -> str:
 _FIT_URL = re.compile(r"https?://\S+?\.fit\b")
 
 
-async def _download_fit(c: CorosMcp, label_id: str, sport_type: int) -> bytes | None:
+class FitDownloadError(Exception):
+    pass
+
+
+def fit_url(reply: str) -> str:
+    """The download URL in queryActivityFitFileDownloadUrls' reply, e.g.
+    `1. <labelId>.fit\n   https://s3.coros.com/fit/<user>/<labelId>.fit`."""
+    m = _FIT_URL.search(reply)
+    if not m:
+        raise FitDownloadError(f"no FIT URL in COROS's reply: {reply.strip()[:200]!r}")
+    return m.group(0)
+
+
+async def fetch_fit(url: str) -> bytes:
+    async with httpx.AsyncClient(timeout=60, follow_redirects=True) as http:
+        r = await http.get(url)
+    if r.status_code != 200:
+        raise FitDownloadError(f"GET {url} -> HTTP {r.status_code}: {r.text[:200]!r}")
+    if r.content[8:12] != b".FIT":  # every FIT file's header carries the ".FIT" signature
+        ctype = r.headers.get("content-type")
+        raise FitDownloadError(f"GET {url} returned {ctype}, not a FIT file: {r.content[:80]!r}")
+    return r.content
+
+
+async def _download_fit(c: CorosMcp, label_id: str, sport_type: int) -> bytes:
     text = await c.call(
         "queryActivityFitFileDownloadUrls", {"labelId": label_id, "sportType": sport_type}
     )
-    m = _FIT_URL.search(text)
-    if not m:
-        return None
-    async with httpx.AsyncClient(timeout=60) as http:
-        r = await http.get(m.group(0))
-        r.raise_for_status()
-        return r.content
+    return await fetch_fit(fit_url(text))
 
 
 async def sync_all(
@@ -108,10 +126,13 @@ async def sync_all(
                         )
                     ).scalar_one_or_none()
                     if act is not None and not act.fit_path and fit_limit > 0:
+                        fit_limit -= 1  # the URL request itself counts against COROS's daily cap
                         data = await _download_fit(c, r.label_id, r.sport_type)
-                        if data:
-                            counts["fit"] = counts.get("fit", 0) + store_fit(s, act, data)
-                            fit_limit -= 1
+                        counts["fit"] = counts.get("fit", 0) + store_fit(s, act, data)
+                        log(s, f"fit:{r.label_id}", True)
                 except Exception as e:
-                    log(s, f"activity:{r.label_id}", False, str(e)[:500])
+                    counts["fit_failed"] = counts.get("fit_failed", 0) + isinstance(
+                        e, FitDownloadError
+                    )
+                    log(s, f"activity:{r.label_id}", False, f"{type(e).__name__}: {e}"[:500])
     return counts
