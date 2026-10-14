@@ -31,6 +31,8 @@ class User(Base):
     height_cm: Mapped[float | None] = mapped_column(Float)
     hr_max: Mapped[int | None] = mapped_column(Integer)
     hr_max_source: Mapped[str | None] = mapped_column(String(20))  # user|field_test|estimated
+    lthr: Mapped[int | None] = mapped_column(Integer)  # set by the user (lab or field test)
+    zone_basis: Mapped[str | None] = mapped_column(String(10))  # lthr (default) | hr_max
     units: Mapped[str] = mapped_column(String(10), default="imperial")
     sleep_need_min: Mapped[int | None] = mapped_column(Integer, default=480)
     tz: Mapped[str] = mapped_column(String(40), default="America/New_York")
@@ -220,6 +222,18 @@ class JournalEntry(Base):
     tag: Mapped[str] = mapped_column(String(40))
     value: Mapped[float | None] = mapped_column(Float)  # 1/0 for booleans
     note: Mapped[str | None] = mapped_column(String(500))
+
+
+class Race(Base):
+    """A race result the user entered; calibrates VO2max, economy and race predictions."""
+
+    __tablename__ = "races"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    name: Mapped[str | None] = mapped_column(String(80))
+    distance_m: Mapped[float] = mapped_column(Float)
+    time_s: Mapped[float] = mapped_column(Float)
+    activity_id: Mapped[int | None] = mapped_column(Integer)
 
 
 class Score(Base):

@@ -63,7 +63,7 @@ def test_journal_crud_and_insights():
 def test_body_summary_computes_bmi_and_change():
     from health.models import BodyMetric, User
 
-    today = date.today()
+    today = date(2026, 10, 13)  # the pinned "today" (conftest)
     with dbmod.session_scope() as s:
         s.add(User(name="t", height_cm=180.0))
         for k, w in [(60, 80.0), (31, 79.0), (0, 78.0)]:
@@ -112,6 +112,27 @@ def test_settings_round_trip_and_hr_max_override(fixture_text):
     j = c.put("/settings", json={"clear_hr_max": True}, headers=H).json()
     assert j["hr_max"]["method"] == "age_formula"
     assert c.put("/settings", json={"hr_max": 300}, headers=H).status_code == 422
+
+
+def test_zones_follow_lthr_override_and_basis(fixture_text):
+    from health.sources.coros.store import import_text
+
+    with dbmod.session_scope() as s:
+        import_text(s, "queryUserInfo", fixture_text("user_info.txt"))
+        import_text(s, "queryFitnessAssessmentOverview", fixture_text("fitness.txt"))
+    c = _c()
+    z = c.get("/zones", headers=H).json()
+    hm = z["hr_max"]
+    assert z["basis"] == "lthr" and z["lthr_source"] == "prior"
+    assert z["lthr"] == pytest.approx(0.89 * hm, abs=0.1)
+    assert z["threshold_pace_source"] == "coros" and len(z["pace"]) == 5
+    j = c.put("/settings", json={"lthr": 170}, headers=H).json()
+    assert j["lthr"]["set_value"] == 170 and j["zones"]["lthr_source"] == "user"
+    assert j["zones"]["hr"][4]["lo_bpm"] == 170
+    j = c.put("/settings", json={"zone_basis": "hr_max"}, headers=H).json()
+    assert j["zones"]["basis"] == "hr_max" and j["zones"]["hr"][4]["lo_bpm"] == round(0.9 * hm)
+    j = c.put("/settings", json={"zone_basis": "lthr", "clear_lthr": True}, headers=H).json()
+    assert j["zones"]["lthr_source"] == "prior"
 
 
 def test_fitness_models_shows_coros_and_waits_for_streams(fixture_text):

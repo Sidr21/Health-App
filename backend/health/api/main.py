@@ -21,8 +21,9 @@ from health.compute import (
     journal_insights,
     strength_summary,
     workout_detail,
+    zones_payload,
 )
-from health.config import settings
+from health.config import settings, today_local
 from health.db import get_session, init_db
 from health.engine.muscles import MUSCLES, catalog, common_exercises
 from health.models import (
@@ -169,7 +170,7 @@ def _day_payload(s: Session, d: date) -> dict:
 
 @app.get("/today", dependencies=[Depends(require_token)])
 def today(s: Session = Depends(get_session)) -> dict:
-    return _day_payload(s, date.today())
+    return _day_payload(s, today_local())
 
 
 @app.get("/days", dependencies=[Depends(require_token)])
@@ -257,7 +258,7 @@ def strength(
     day: date | None = Query(None, alias="date"), s: Session = Depends(get_session)
 ) -> dict:
     """Muscle freshness, muscular load, 7-day sets/volume and recent sessions for a day."""
-    return strength_summary(s, day or datetime.now(ZoneInfo(settings.timezone)).date())
+    return strength_summary(s, day or today_local())
 
 
 @app.get("/strength/exercises", dependencies=[Depends(require_token)])
@@ -395,14 +396,14 @@ def journal_delete(day: date, tag: str, s: Session = Depends(get_session)) -> di
 
 @app.get("/journal/insights", dependencies=[Depends(require_token)])
 def journal_insights_api(days: int = Query(90, ge=14, le=365), s: Session = Depends(get_session)):
-    return journal_insights(s, datetime.now(ZoneInfo(settings.timezone)).date(), days)
+    return journal_insights(s, today_local(), days)
 
 
 # ---------------------------------------------------------------- body, settings, models
 
 
 def _today() -> date:
-    return datetime.now(ZoneInfo(settings.timezone)).date()
+    return today_local()
 
 
 @app.get("/body/summary", dependencies=[Depends(require_token)])
@@ -427,12 +428,105 @@ def bioage_api(s: Session = Depends(get_session)) -> dict:
     if not rows:
         return {"value": None, "history": []}
     last = rows[-1]
+    week_ago = last.date - timedelta(days=7)
+    prev = next((r for r in reversed(rows) if r.date <= week_ago), None)
     return {
         "value": last.value,
         "date": last.date.isoformat(),
         **(last.inputs or {}),
+        "previous": (
+            {
+                "date": prev.date.isoformat(),
+                "value": prev.value,
+                "contributions": (prev.inputs or {}).get("contributions", {}),
+                "inputs": (prev.inputs or {}).get("inputs", {}),
+            }
+            if prev
+            else None
+        ),
         "history": [{"date": r.date.isoformat(), "value": r.value} for r in rows],
     }
+
+
+@app.get("/stress/{day}", dependencies=[Depends(require_token)])
+def stress_api(day: date, s: Session = Depends(get_session)) -> dict:
+    """One day's stress curve, sleep windows and minutes per COROS level while awake."""
+    from health.compute_models import stress_day
+
+    return stress_day(s, day)
+
+
+class RaceIn(BaseModel):
+    date: date
+    distance_m: float = Field(ge=1500, le=42500)
+    time_s: float = Field(gt=180, lt=8 * 3600)
+    name: str | None = Field(None, max_length=80)
+
+
+def _race_out(s: Session, r) -> dict:
+    """A race with its VDOT and what we predicted for that distance the day before it."""
+    from health.compute_models import latest_fitness
+    from health.engine import fitness as fit
+
+    pred = latest_fitness(s, r.date - timedelta(days=1)).get(("race_5k", "ours"))
+    vdot_then = (pred.inputs or {}).get("vdot") if pred else None
+    return {
+        "id": r.id,
+        "date": r.date.isoformat(),
+        "name": r.name,
+        "distance_m": r.distance_m,
+        "time_s": r.time_s,
+        "vdot": round(fit.vdot(r.distance_m, r.time_s), 1),
+        "predicted_s": fit.race_time(vdot_then, r.distance_m) if vdot_then else None,
+    }
+
+
+def _refit(s: Session) -> None:
+    from health.compute_models import compute_bioage, compute_fitness
+
+    compute_fitness(s, _today())
+    compute_bioage(s, _today())
+
+
+@app.get("/races", dependencies=[Depends(require_token)])
+def list_races(s: Session = Depends(get_session)) -> list[dict]:
+    from health.models import Race
+
+    rows = s.execute(select(Race).order_by(Race.date.desc())).scalars().all()
+    return [_race_out(s, r) for r in rows]
+
+
+@app.post("/races", dependencies=[Depends(require_token)])
+def add_race(body: RaceIn, s: Session = Depends(get_session)) -> dict:
+    """Record a race result, then refit VO2max, economy and predictions for today."""
+    from health.models import Race
+
+    if body.date > _today():
+        raise HTTPException(422, "race date is in the future")
+    r = Race(date=body.date, name=body.name, distance_m=body.distance_m, time_s=body.time_s)
+    s.add(r)
+    s.flush()
+    _refit(s)
+    return _race_out(s, r)
+
+
+@app.delete("/races/{race_id}", dependencies=[Depends(require_token)])
+def delete_race(race_id: int, s: Session = Depends(get_session)) -> dict:
+    from health.models import Race
+
+    r = s.get(Race, race_id)
+    if r is None:
+        raise HTTPException(404, "no such race")
+    s.delete(r)
+    s.flush()
+    _refit(s)
+    return {"deleted": race_id}
+
+
+@app.get("/zones", dependencies=[Depends(require_token)])
+def zones_api(s: Session = Depends(get_session)) -> dict:
+    """Heart-rate zones from our HRmax and threshold HR, and pace zones from threshold pace."""
+    return zones_payload(s, _today()) or {"hr": None, "pace": None}
 
 
 @app.get("/fitness/models", dependencies=[Depends(require_token)])
@@ -449,6 +543,9 @@ class SettingsIn(BaseModel):
     clear_hr_max: bool = False  # go back to the estimate
     units: Literal["imperial", "metric"] | None = None
     sleep_need_min: int | None = Field(None, ge=300, le=660)
+    lthr: int | None = Field(None, ge=100, le=220)
+    clear_lthr: bool = False  # go back to our estimate
+    zone_basis: Literal["lthr", "hr_max"] | None = None
 
 
 def _settings_payload(s: Session) -> dict:
@@ -477,6 +574,8 @@ def _settings_payload(s: Session) -> dict:
             "method": hm.method if hm else None,
             "candidates": hm.candidates if hm else {},
         },
+        "lthr": {"set_value": u.lthr if u else None},
+        "zones": zones_payload(s, _today()),
         "units": (u.units if u else None) or "imperial",
         "sleep_need_min": (u.sleep_need_min if u else None) or 480,
         "timezone": settings.timezone,
@@ -505,7 +604,7 @@ def put_settings(body: SettingsIn, s: Session = Depends(get_session)) -> dict:
     if u is None:
         u = User(name="me")
         s.add(u)
-    for field in ("sex", "dob", "height_cm", "units", "sleep_need_min"):
+    for field in ("sex", "dob", "height_cm", "units", "sleep_need_min", "zone_basis"):
         v = getattr(body, field)
         if v is not None:
             setattr(u, field, v)
@@ -513,5 +612,9 @@ def put_settings(body: SettingsIn, s: Session = Depends(get_session)) -> dict:
         u.hr_max, u.hr_max_source = None, None
     elif body.hr_max is not None:
         u.hr_max, u.hr_max_source = body.hr_max, body.hr_max_source or "user"
+    if body.clear_lthr:
+        u.lthr = None
+    elif body.lthr is not None:
+        u.lthr = body.lthr
     s.flush()
     return _settings_payload(s)

@@ -255,3 +255,12 @@ def test_bio_age_without_vo2max_and_missing_inputs():
     r = bioage.bio_age(bioage.BioAgeInputs(age=30, sex="female", rhr=78))
     assert r.fitness_age is None and r.value == 40  # +10 bpm -> +10 years, only input
     assert bioage.bio_age(bioage.BioAgeInputs(age=30, sex=None)).value == 30
+
+
+def test_lthr_floor_from_sustained_hard_effort():
+    rows = _run(30, speed=3.8, hr=188, start_hr=188)
+    assert fitness.sustained_hr(rows) == pytest.approx(188, abs=0.5)
+    assert fitness.lthr_floor(rows) == pytest.approx(188 / 1.06, abs=0.5)
+    paused = _run(30, hr=188, start_hr=188, pause=(400, 500))
+    paused = [r for r in paused if r["t"] < 900]  # 400 s + 400 s: no 10 min of continuous data
+    assert fitness.sustained_hr(paused) is None

@@ -50,3 +50,12 @@ export function clockDuration(seconds: number | null | undefined): string {
   const sec = s % 60;
   return h ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}` : `${m}:${String(sec).padStart(2, "0")}`;
 }
+
+/** "mm:ss" or "h:mm:ss" → seconds; null when malformed. */
+export function parseClock(t: string): number | null {
+  const parts = t.trim().split(":").map((p) => (/^\d+$/.test(p) ? Number(p) : NaN));
+  if (parts.length < 2 || parts.length > 3 || parts.some((p) => Number.isNaN(p))) return null;
+  const [h, m, s] = parts.length === 3 ? parts : [0, ...parts];
+  if (m >= 60 || s >= 60) return null;
+  return h * 3600 + m * 60 + s;
+}

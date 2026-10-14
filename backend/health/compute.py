@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from health.config import settings
+from health.config import settings, today_local
 from health.engine.baselines import rolling_baseline
 from health.engine.hrv import nightly_hrv
 from health.engine.muscles import (
@@ -29,13 +29,15 @@ from health.engine.recovery import RecoveryInputs, recovery_score
 from health.engine.sleep import SleepInputs, sleep_score
 from health.engine.workout import (
     HrMax,
+    ZoneModel,
     cardio_focus,
     downsample,
     estimate_hr_max,
     hr_recovery,
+    pace_zones,
     time_in_zones_laps,
     time_in_zones_stream,
-    zones,
+    zone_model,
 )
 from health.models import Activity, Daily, HrvSample, Score, SleepSession, StrengthSet
 from health.sources.strength_store import is_strength
@@ -425,13 +427,17 @@ def store_muscular_score(s: Session, d: date) -> dict:
 def hr_max_for(s: Session, today: date | None = None) -> HrMax | None:
     from health.models import User
 
-    today = today or date.today()
+    today = today or today_local()
     user = s.execute(select(User)).scalars().first()
     since = datetime.combine(today - timedelta(days=365), datetime.min.time())
     observed = [
         h
         for (h,) in s.execute(
-            select(Activity.max_hr).where(Activity.start_ts >= since, Activity.max_hr.is_not(None))
+            select(Activity.max_hr).where(
+                Activity.start_ts >= since,
+                Activity.start_ts < _end_of_local_day(today),
+                Activity.max_hr.is_not(None),
+            )
         )
     ]
     return estimate_hr_max(
@@ -441,6 +447,68 @@ def hr_max_for(s: Session, today: date | None = None) -> HrMax | None:
         set_value=user.hr_max if user else None,
         set_source=user.hr_max_source if user else None,
     )
+
+
+def lthr_source(parts: dict) -> str:
+    """ours when a direct measurement (Friel, HR at CS) is in the blend; else what it rests on."""
+    keys = set(parts)
+    if keys - {"prior", "effort_floor"}:
+        return "ours"
+    return "effort_floor" if "effort_floor" in keys else "prior"
+
+
+def zone_model_for(s: Session, d: date | None = None) -> ZoneModel | None:
+    """Zones from our HRmax and threshold HR as of `d`: the user's LTHR, else our blended
+    estimate (the first one made on or after `d`, else the newest), else the 0.89 x HRmax
+    prior. `zone_basis = "hr_max"` in settings switches to % of HRmax."""
+    from health.models import FitnessEstimate, User
+
+    d = d or today_local()
+    hm = hr_max_for(s, d)
+    if hm is None:
+        return None
+    user = s.execute(select(User)).scalars().first()
+    basis = (user.zone_basis if user else None) or "lthr"
+    if user and user.lthr:
+        return zone_model(hm.value, user.lthr, "user", basis)
+    q = select(FitnessEstimate).where(
+        FitnessEstimate.metric == "lthr", FitnessEstimate.method == "blend"
+    )
+    # the first estimate made on or after `d` has seen that day's workouts (a hard run sets
+    # its own zones); for days after the newest estimate, the newest one
+    row = (
+        s.execute(
+            q.where(FitnessEstimate.date >= d).order_by(FitnessEstimate.date).limit(1)
+        ).scalar_one_or_none()
+        or s.execute(q.order_by(FitnessEstimate.date.desc()).limit(1)).scalar_one_or_none()
+    )
+    if row is not None:
+        src = lthr_source((row.inputs or {}).get("parts") or {})
+        return zone_model(hm.value, row.value, src, basis)
+    return zone_model(hm.value, round(0.89 * hm.value, 1), "prior", basis)
+
+
+def zones_payload(s: Session, today: date) -> dict | None:
+    """The zone tables the app shows in settings and on the fitness models screen."""
+    from health.compute_models import latest_fitness
+
+    zm = zone_model_for(s, today)
+    if zm is None:
+        return None
+    hm = hr_max_for(s, today)
+    tp = latest_fitness(s, today).get(("threshold_pace", "ours"))
+    coros_tp = latest_fitness(s, today).get(("threshold_pace", "coros"))
+    pace_src, pace_val = (
+        ("ours", tp.value) if tp else ("coros", coros_tp.value) if coros_tp else (None, None)
+    )
+    return {
+        **zm.describe(),
+        "hr_max_method": hm.method if hm else None,
+        "hr": zm.table(),
+        "threshold_pace_s_per_km": pace_val,
+        "threshold_pace_source": pace_src,
+        "pace": pace_zones(pace_val) if pace_val else None,
+    }
 
 
 def workout_detail(s: Session, activity_id: int) -> dict | None:
@@ -471,24 +539,25 @@ def workout_detail(s: Session, activity_id: int) -> dict | None:
         .all()
     )
     hm = hr_max_for(s, _local_day(a.start_ts))
+    zm = zone_model_for(s, _local_day(a.start_ts))
 
     stream = [(x.t_offset_s, x.hr, x.speed_mps) for x in samples]
     zone_block = None
     hrr = None
-    if hm is not None:
+    if zm is not None:
         if any(h for _, h, _ in stream):
-            secs = time_in_zones_stream([(t, h) for t, h, _ in stream], hm.value)
+            secs = time_in_zones_stream([(t, h) for t, h, _ in stream], zm)
             method = "stream"
-            hrr = hr_recovery(stream, hm.value)
+            hrr = hr_recovery(stream, zm)
         else:
-            secs = time_in_zones_laps([(lap.duration_s, lap.avg_hr) for lap in laps], hm.value)
+            secs = time_in_zones_laps([(lap.duration_s, lap.avg_hr) for lap in laps], zm)
             method = "laps"
         if sum(secs) > 0:
             zone_block = {
                 "method": method,
+                **zm.describe(),
                 "zones": [
-                    {**z, "seconds": round(sec)}
-                    for z, sec in zip(zones(hm.value), secs, strict=True)
+                    {**z, "seconds": round(sec)} for z, sec in zip(zm.table(), secs, strict=True)
                 ],
                 "focus": cardio_focus(secs),
             }
@@ -709,9 +778,6 @@ def fitness_models(s: Session, today: date) -> dict:
             out["ci"] = [round(r.ci_low, 1), round(r.ci_high, 1)]
         return out
 
-    def parts(metric: str, skip: tuple[str, ...]) -> dict[str, float]:
-        return {m: r.value for (k, m), r in latest.items() if k == metric and m not in skip}
-
     runs = s.execute(select(Activity).where(Activity.sport.ilike("%run%"))).scalars().all()
     with_stream = {a for (a,) in s.execute(select(ActivitySample.activity_id).distinct())}
     n_stream = sum(1 for a in runs if a.id in with_stream)
@@ -732,7 +798,7 @@ def fitness_models(s: Session, today: date) -> dict:
         "vo2max": {
             "coros": val("vo2max", "coros"),
             "ours": vo2,
-            "parts": parts("vo2max", ("coros", "blend", "vdot_lower_bound")),
+            "parts": (latest[("vo2max", "blend")].inputs or {}).get("parts", {}) if vo2 else {},
             "lower_bound": val("vo2max", "vdot_lower_bound"),
             "status": None if vo2 else waiting,
         },
@@ -741,8 +807,9 @@ def fitness_models(s: Session, today: date) -> dict:
             {
                 "value": lthr.value,
                 "ci": [round(lthr.ci_low, 1), round(lthr.ci_high, 1)] if lthr.ci_low else None,
-                "parts": parts("lthr", ("blend",)),
-                "prior_only": set(parts("lthr", ("blend",))) == {"prior"},
+                "parts": (lthr.inputs or {}).get("parts") or {},
+                "source": lthr_source((lthr.inputs or {}).get("parts") or {}),
+                "prior_only": lthr_source((lthr.inputs or {}).get("parts") or {}) != "ours",
             }
             if lthr
             else None

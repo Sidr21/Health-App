@@ -8,8 +8,10 @@ from health.engine.workout import (
     cardio_focus,
     estimate_hr_max,
     hr_recovery,
+    pace_zones,
     time_in_zones_laps,
     time_in_zones_stream,
+    zone_model,
     zone_of,
     zones,
 )
@@ -104,6 +106,7 @@ def test_workout_detail_endpoint_laps_then_stream(fixture_text):
     assert j["stats"]["total_s"] == 41 * 60 + 45 and j["coros"]["training_focus"] == "Base"
     assert j["hr_max"]["method"] in ("age_formula", "observed")
     assert j["zones"]["method"] == "laps" and j["hr_recovery"] is None
+    assert j["zones"]["basis"] == "lthr" and j["zones"]["lthr_source"] == "prior"
     assert j["stream"]["n"] == 0 and len(j["laps"]) == 2
     assert j["muscles"][0]["id"] == "quads"
 
@@ -157,3 +160,24 @@ def test_hr_recovery_needs_easing_off_when_speed_is_known():
     # same HR curve but still running at effort pace: not a recovery
     no_ease = [(t, hr, 3.3) for t, hr, _ in with_speed]
     assert hr_recovery(no_ease, 190) is None
+
+
+def test_lthr_zones_capped_and_fallbacks():
+    m = zone_model(194, 172.7, "ours")
+    assert m.basis == "lthr" and m.lower == (0, 147, 155, 164, 173)  # Friel 85/90/95/100 %
+    assert [z["name"] for z in m.table()][-1] == "VO₂max"
+    assert [m.zone_of(h) for h in (140, 150, 160, 170, 180)] == [1, 2, 3, 4, 5]
+    assert m.table()[0]["lo_bpm"] is None and m.table()[3]["hi_bpm"] == 172
+    assert time_in_zones_laps([(600, 150), (300, 180)], m) == [0, 600, 0, 0, 300]
+    # implausible LTHR (>= HRmax) or the user's choice falls back to % of HRmax
+    assert zone_model(180, 185).basis == "hr_max"
+    assert zone_model(194, 172.7, "ours", basis="hr_max").lower == (0, 116, 136, 155, 175)
+    # hard-effort floor for HR recovery follows the zone model (Z3 lower bound)
+    assert zone_model(194, 172.7).lower[2] > zone_model(194, basis="hr_max").lower[2]
+
+
+def test_pace_zones_from_threshold_pace():
+    z = pace_zones(270)  # 4:30 / km
+    assert z[0]["slow_s"] is None and z[0]["fast_s"] == round(1.29 * 270) + 1
+    assert z[3]["slow_s"] == round(1.05 * 270) and z[4]["fast_s"] is None
+    assert all(a["fast_s"] == b["slow_s"] + 1 for a, b in zip(z, z[1:], strict=False))

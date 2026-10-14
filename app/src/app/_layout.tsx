@@ -51,6 +51,14 @@ export default function RootLayout() {
             <Stack.Screen name="journal/insights" />
             <Stack.Screen name="body/[metric]" />
             <Stack.Screen name="fitness-models" />
+            <Stack.Screen name="zones" />
+            <Stack.Screen name="strain" />
+            <Stack.Screen name="energy" />
+            <Stack.Screen name="stress" />
+            <Stack.Screen name="cardio-load" />
+            <Stack.Screen name="bioage" />
+            <Stack.Screen name="races" />
+            <Stack.Screen name="vital/[metric]" />
           </Stack>
         </QueryClientProvider>
       </SafeAreaProvider>

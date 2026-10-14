@@ -33,12 +33,12 @@ CLAMP = 15.0
 METHOD = "bioage_v1"
 
 
-def _sex(sex: str | None) -> str:
+def sex_key(sex: str | None) -> str:
     return "female" if (sex or "").lower().startswith("f") else "male"
 
 
 def vo2_norm(age: float, sex: str | None) -> float:
-    pts = VO2_NORMS[_sex(sex)]
+    pts = VO2_NORMS[sex_key(sex)]
     if age <= pts[0][0]:
         (a0, v0), (a1, v1) = pts[0], pts[1]
     elif age >= pts[-1][0]:
@@ -51,7 +51,7 @@ def vo2_norm(age: float, sex: str | None) -> float:
 
 def fitness_age(vo2max: float, sex: str | None) -> float:
     """Inverse of vo2_norm (norms fall with age), extrapolated linearly, clamped to 15–95."""
-    pts = VO2_NORMS[_sex(sex)]
+    pts = VO2_NORMS[sex_key(sex)]
     if vo2max >= pts[0][1]:
         (a0, v0), (a1, v1) = pts[0], pts[1]
     elif vo2max <= pts[-1][1]:
@@ -94,7 +94,7 @@ class BioAge:
 def bio_age(x: BioAgeInputs) -> BioAge:
     import math
 
-    sex = _sex(x.sex)
+    sex = sex_key(x.sex)
     adj: dict[str, float] = {}
     if x.rhr is not None:
         adj["rhr"] = _clamp(x.rhr - RHR_NORM[sex])

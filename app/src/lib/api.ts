@@ -78,6 +78,23 @@ export interface ZoneOut {
   seconds: number;
 }
 
+export type LthrSource = "user" | "ours" | "effort_floor" | "prior";
+
+export interface ZoneBasis {
+  basis: "lthr" | "hr_max";
+  hr_max: number;
+  lthr: number | null;
+  lthr_source: LthrSource | null;
+}
+
+export interface ZonesOut extends ZoneBasis {
+  hr_max_method: string | null;
+  hr: { zone: number; name: string; lo_bpm: number | null; hi_bpm: number | null }[];
+  threshold_pace_s_per_km: number | null;
+  threshold_pace_source: "ours" | "coros" | null;
+  pace: { zone: number; name: string; slow_s: number | null; fast_s: number | null }[] | null;
+}
+
 export interface WorkoutDetail {
   id: number;
   load: { trimp: number; method: "stream" | "avg_hr" | "coros_load" | "none"; strain: number };
@@ -104,7 +121,7 @@ export interface WorkoutDetail {
   };
   coros: { training_load: number | null; aerobic_te: number | null; anaerobic_te: number | null; training_focus: string | null; performance: string | null };
   hr_max: HrMaxOut | null;
-  zones: { method: "stream" | "laps"; zones: ZoneOut[]; focus: { low_aerobic: number; high_aerobic: number; anaerobic: number } | null } | null;
+  zones: (ZoneBasis & { method: "stream" | "laps"; zones: ZoneOut[]; focus: { low_aerobic: number; high_aerobic: number; anaerobic: number } | null }) | null;
   hr_recovery: { drop_bpm: number; from_bpm: number; to_bpm: number; at_s: number; rating: string } | null;
   stream: { n: number; points: { t: number; hr: number | null; speed_mps: number | null; alt_m: number | null; power_w: number | null; cadence: number | null }[] };
   laps: { idx: number; duration_s: number | null; distance_m: number | null; avg_hr: number | null; max_hr: number | null; avg_pace_s_per_km: number | null; avg_power_w: number | null; avg_cadence: number | null }[];
@@ -158,6 +175,8 @@ export interface BodySummary {
 export interface SettingsOut {
   profile: { name: string | null; sex: string | null; dob: string | null; height_cm: number | null };
   hr_max: { set_value: number | null; set_source: string | null; effective: number | null; method: string | null; candidates: Record<string, number> };
+  lthr: { set_value: number | null };
+  zones: ZonesOut | null;
   units: "imperial" | "metric";
   sleep_need_min: number;
   timezone: string;
@@ -171,9 +190,31 @@ export type SettingsIn = Partial<{
   hr_max: number;
   hr_max_source: "user" | "field_test";
   clear_hr_max: boolean;
+  lthr: number;
+  clear_lthr: boolean;
+  zone_basis: "lthr" | "hr_max";
   units: "imperial" | "metric";
   sleep_need_min: number;
 }>;
+
+export interface StressDayOut {
+  date: string;
+  samples: { t: string; v: number }[];
+  asleep: { start: string; end: string }[];
+  levels: { name: "Rest" | "Low" | "Medium" | "High"; from: number; minutes: number }[];
+  awake_mean: number | null;
+  high_minutes: number | null;
+}
+
+export interface RaceOut {
+  id: number;
+  date: string;
+  name: string | null;
+  distance_m: number;
+  time_s: number;
+  vdot: number;
+  predicted_s: number | null;
+}
 
 export interface ValueAt {
   value: number;
@@ -185,7 +226,7 @@ export interface FitnessModels {
   hr_max: HrMaxOut | null;
   vo2max: { coros: ValueAt | null; ours: ValueAt | null; parts: Record<string, number>; lower_bound: ValueAt | null; status: string | null };
   running_level: ValueAt | null;
-  lthr: { value: number; ci: [number, number] | null; parts: Record<string, number>; prior_only: boolean } | null;
+  lthr: { value: number; ci: [number, number] | null; parts: Record<string, number>; source: LthrSource; prior_only: boolean } | null;
   threshold: { coros_pace_s_per_km: ValueAt | null; ours_lthr: number | null; ours_pace_s_per_km: number | null; pace_method: string | null; status: string | null };
   critical_speed: { m_per_s: number; d_prime_m: number | null } | null;
   races: { key: string; label: string; distance_m: number; coros_s: ValueAt | null; ours_s: number | null }[];
@@ -203,6 +244,9 @@ export interface BioAgeOut {
   adjustments?: Record<string, number>;
   inputs?: Record<string, number | string | null>;
   vo2max_source?: string | null;
+  norms?: Partial<Record<"vo2max" | "rhr" | "hrv_ms" | "sleep_score", number>> &
+    Partial<Record<"bmi" | "body_fat_pct" | "sleep_h" | "met_min_week", [number | null, number | null]>>;
+  previous?: { date: string; value: number; contributions: Record<string, number>; inputs: Record<string, number | string | null> } | null;
   history: { date: string; value: number }[];
 }
 
@@ -316,6 +360,12 @@ export const api = {
   putSettings: (body: SettingsIn) => request<SettingsOut>("/settings", { method: "PUT", body: JSON.stringify(body) }),
   fitnessModels: () => request<FitnessModels>("/fitness/models"),
   bioage: () => request<BioAgeOut>("/bioage"),
+  stressDay: (date: string) => request<StressDayOut>(`/stress/${date}`),
+  zones: () => request<ZonesOut>("/zones"),
+  races: () => request<RaceOut[]>("/races"),
+  addRace: (body: { date: string; distance_m: number; time_s: number; name?: string }) =>
+    request<RaceOut>("/races", { method: "POST", body: JSON.stringify(body) }),
+  deleteRace: (id: number) => request<{ deleted: number }>(`/races/${id}`, { method: "DELETE" }),
   strengthExercises: () =>
     request<{ common: CommonExercise[]; muscles: { id: MuscleId; name: string; views: string[] }[] }>("/strength/exercises"),
   logStrength: (body: LogSessionIn) =>
@@ -329,6 +379,8 @@ export const api = {
     }),
 };
 
+/** YYYY-MM-DD of `d` in the device's time zone (toISOString would give the UTC date, which is
+ * already tomorrow on a US evening). */
 export function isoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }

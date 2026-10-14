@@ -9,6 +9,8 @@ from pathlib import Path
 
 import typer
 
+from health.config import today_local
+
 app = typer.Typer(no_args_is_help=True, help="Health app backend tools")
 coros = typer.Typer(no_args_is_help=True, help="COROS (official MCP) commands")
 db = typer.Typer(no_args_is_help=True, help="Database")
@@ -80,7 +82,7 @@ def coros_sync(days: int = 30, laps: bool = True, fit_limit: int = 10) -> None:
     from health.compute import compute_range
 
     with session_scope() as s:
-        n = compute_range(s, date.today() - timedelta(days=days), date.today())
+        n = compute_range(s, today_local() - timedelta(days=days), today_local())
     typer.echo(f"recomputed {n} days")
 
 
@@ -144,7 +146,7 @@ def strength_show(day: str = typer.Argument("today")) -> None:
     from health.db import init_db, session_scope
 
     init_db()
-    d = date.today() if day == "today" else date.fromisoformat(day)
+    d = today_local() if day == "today" else date.fromisoformat(day)
     with session_scope() as s:
         typer.echo(json.dumps(strength_summary(s, d), indent=2, default=str))
 
@@ -157,7 +159,7 @@ def compute(days: int = 30) -> None:
 
     init_db()
     with session_scope() as s:
-        n = compute_range(s, date.today() - timedelta(days=days), date.today())
+        n = compute_range(s, today_local() - timedelta(days=days), today_local())
     typer.echo(f"recomputed {n} days")
 
 
@@ -168,7 +170,7 @@ def show(day: str = typer.Argument("today")) -> None:
     from health.db import init_db, session_scope
 
     init_db()
-    d = date.today() if day == "today" else date.fromisoformat(day)
+    d = today_local() if day == "today" else date.fromisoformat(day)
     with session_scope() as s:
         typer.echo(json.dumps(_day_payload(s, d), indent=2, default=str))
 

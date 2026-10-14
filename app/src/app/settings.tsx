@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { router } from "expo-router";
 import React, { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
@@ -9,6 +10,7 @@ import { Surface } from "@/components/Surface";
 import { API_URL, api, type SettingsIn, type SettingsOut } from "@/lib/api";
 import { enableBackgroundDelivery, healthKitAvailable, requestHealthKitAccess, syncHealthKit } from "@/lib/healthkit";
 import { height as fmtHeight, setUnits } from "@/lib/units";
+import { zoneBasisLabel } from "@/lib/zones";
 import { colors, font, fonts, radius, spacing } from "@/theme/tokens";
 
 const METHOD: Record<string, string> = {
@@ -161,6 +163,11 @@ export default function SettingsScreen() {
               onClear={() => save.mutate({ clear_hr_max: true })}
             />
             <Text style={styles.hint}>The HRmax test workout is in your COROS workout library (docs/engine/hrmax-test.md).</Text>
+          </Surface>
+          <Surface style={styles.card} onPress={() => router.push("/zones")}>
+            <Row label="Threshold HR & zones" hint={st?.zones ? zoneBasisLabel(st.zones) : "Needs a max HR"}>
+              <Text style={styles.candVal}>{st?.zones?.lthr ? `${Math.round(st.zones.lthr)} ›` : "›"}</Text>
+            </Row>
           </Surface>
 
           <SectionLabel title="Profile" note="from COROS, editable" />

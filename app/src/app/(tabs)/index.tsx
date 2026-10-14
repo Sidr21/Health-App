@@ -77,9 +77,9 @@ export default function HomeScreen() {
 
       <Surface radiusSize={radius.lg} style={styles.ringCard}>
         <View style={styles.dials}>
-          <View style={styles.ringCol}>
+          <Pressable style={styles.ringCol} onPress={() => router.push("/strain")}>
             <Dial label="Strain" progress={strainSc ? strainSc.value / 21 : null} value={strainSc ? strainSc.value.toFixed(1) : "–"} color={colors.strain} hatched={!strainSc} />
-          </View>
+          </Pressable>
           <Pressable style={styles.ringCol} onPress={() => router.push("/recovery")}>
             <Dial label="Recovery" progress={rec ? rec.value / 100 : null} value={rec ? pct(rec.value) : "–"} color={bandColor(comps.band)} />
           </Pressable>
@@ -114,8 +114,8 @@ export default function HomeScreen() {
       ) : null}
 
       <SectionLabel title="Stress & Energy" />
-      <StressCard avg={today?.daily.stress_avg ?? null} min={today?.daily.stress_min ?? null} max={today?.daily.stress_max ?? null} updated={today?.daily.stress_updated ?? null} />
-      <EnergyBar pct={today?.scores.energy?.value ?? null} />
+      <StressCard avg={today?.daily.stress_avg ?? null} min={today?.daily.stress_min ?? null} max={today?.daily.stress_max ?? null} updated={today?.daily.stress_updated ?? null} onPress={() => router.push("/stress")} />
+      <EnergyBar pct={today?.scores.energy?.value ?? null} onPress={() => router.push("/energy")} />
 
       <SectionLabel title="Health Monitor" note="vs your 28-day normal" />
       <View style={styles.grid}>

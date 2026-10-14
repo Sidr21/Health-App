@@ -67,6 +67,19 @@ def energy_bank(
     workouts: list[tuple[datetime, datetime, float]],
 ) -> list[EnergyPoint]:
     """workouts: (start, end, trimp). Returns one point per 5-minute slot from wake to now."""
+    return energy_bank_detail(wake, now, start, stress, workouts)[0]
+
+
+def energy_bank_detail(
+    wake: datetime,
+    now: datetime,
+    start: float | None,
+    stress: list[tuple[datetime, int]],
+    workouts: list[tuple[datetime, datetime, float]],
+) -> tuple[list[EnergyPoint], dict[str, float]]:
+    """As energy_bank, plus the points each term moved the bank (before the 0–100 clamp):
+    awake (−), stress (−), calm (+), workouts (−)."""
+    totals = {"awake": 0.0, "stress": 0.0, "calm": 0.0, "workouts": 0.0}
     level = float(start if start is not None else 70.0)
     out = [EnergyPoint(wake, round(level, 1))]
     stress = sorted(stress)
@@ -79,17 +92,19 @@ def energy_bank(
         while si < len(stress) and stress[si][0] <= t:
             cur_stress = stress[si][1]
             si += 1
-        delta = -BASE_DRAIN_H * per_h
+        parts = {"awake": -BASE_DRAIN_H * per_h, "stress": 0.0, "calm": 0.0, "workouts": 0.0}
         if cur_stress is not None and cur_stress > 25:
-            delta -= (cur_stress - 25) / 25 * STRESS_DRAIN_H * per_h
+            parts["stress"] = -(cur_stress - 25) / 25 * STRESS_DRAIN_H * per_h
         elif cur_stress is not None:
-            delta += CALM_REFILL_H * per_h
+            parts["calm"] = CALM_REFILL_H * per_h
         for ws, we, trimp in workouts:
             overlap = (min(we, t + step) - max(ws, t)).total_seconds()
             if overlap > 0:
                 dur = max(60.0, (we - ws).total_seconds())
-                delta -= trimp * TRIMP_DRAIN * overlap / dur
-        level = max(0.0, min(100.0, level + delta))
+                parts["workouts"] -= trimp * TRIMP_DRAIN * overlap / dur
+        for k, v in parts.items():
+            totals[k] += v
+        level = max(0.0, min(100.0, level + sum(parts.values())))
         t += step
         out.append(EnergyPoint(t, round(level, 1)))
-    return out
+    return out, {k: round(v, 1) for k, v in totals.items()}

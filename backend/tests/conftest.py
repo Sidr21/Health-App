@@ -19,10 +19,14 @@ def fixture_text():
 
 @pytest.fixture
 def tmp_db(tmp_path, monkeypatch):
-    """Fresh SQLite database per test, with the API token fixed to `testtoken`."""
+    """Fresh SQLite database per test, with the API token fixed to `testtoken` and "today"
+    pinned to the fixtures' last day, so imports stamped with today line up with them."""
+    from datetime import date
+
     from health import db as dbmod
     from health.config import settings
 
+    monkeypatch.setattr(settings, "today", date(2026, 10, 13))
     monkeypatch.setattr(settings, "data_dir", tmp_path)
     monkeypatch.setattr(settings, "database_url", f"sqlite:///{tmp_path}/t.db")
     monkeypatch.setattr(settings, "api_token", "testtoken")

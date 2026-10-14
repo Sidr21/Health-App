@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import React from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { Backdrop } from "@/components/Backdrop";
 import { BodyMap } from "@/components/BodyMap";
@@ -14,6 +14,7 @@ import { api, type MuscleId, type WorkoutDetail } from "@/lib/api";
 import { sportMeta } from "@/lib/sport";
 import type { MuscleFill } from "@/lib/strength";
 import { clockDuration, distance, elevation, getUnits, pace } from "@/lib/units";
+import { zoneBasisLabel } from "@/lib/zones";
 import { colors, font, fonts, radius, spacing } from "@/theme/tokens";
 
 function strainBand(v: number): string {
@@ -165,6 +166,9 @@ export default function WorkoutScreen() {
                 <Text style={styles.method}>{w.zones.method === "stream" ? "per-second" : "estimated from laps"}</Text>
               </View>
               <ZoneBars zones={w.zones.zones} />
+              <Pressable onPress={() => router.push("/zones")}>
+                <Text style={styles.method}>Zones from {zoneBasisLabel(w.zones)} ›</Text>
+              </Pressable>
             </Surface>
           ) : null}
 

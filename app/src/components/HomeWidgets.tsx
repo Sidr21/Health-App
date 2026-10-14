@@ -84,12 +84,12 @@ export function StressCard({ avg, min, max, updated, onPress }: { avg: number | 
 }
 
 /** Segmented green bar with a lightning bolt, Bevel's "Energy" row. */
-export function EnergyBar({ pct }: { pct: number | null }) {
+export function EnergyBar({ pct, onPress }: { pct: number | null; onPress?: () => void }) {
   if (pct == null) return null;
   const n = 48;
   const lit = pct == null ? 0 : Math.round((pct / 100) * n);
   return (
-    <Surface style={[styles.card, styles.energy]}>
+    <Surface style={[styles.card, styles.energy]} onPress={onPress}>
       <BoltIcon size={16} color={colors.recovery} />
       <Svg width={240} height={16} style={{ flex: 1 }}>
         <Defs>

@@ -9,7 +9,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from health.config import settings
+from health.config import settings, today_local
 from health.models import (
     Activity,
     ActivityLap,
@@ -367,10 +367,10 @@ def import_text(s: Session, kind: str, text: str, *, label_id: str | None = None
         case "queryTrainingLoadAssessment":
             return store_training_load(s, p.parse_training_load(text))
         case "queryRecoveryStatus":
-            store_recovery(s, date.today(), p.parse_recovery_status(text))
+            store_recovery(s, today_local(), p.parse_recovery_status(text))
             return 1
         case "queryFitnessAssessmentOverview":
-            store_fitness(s, date.today(), p.parse_fitness_assessment(text))
+            store_fitness(s, today_local(), p.parse_fitness_assessment(text))
             return 1
         case "queryUserInfo":
             store_user(s, p.parse_user_info(text))

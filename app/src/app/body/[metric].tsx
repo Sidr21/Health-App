@@ -8,7 +8,7 @@ import { LineChart } from "@/components/Charts";
 import { DetailHeader } from "@/components/DetailHeader";
 import { SectionLabel } from "@/components/SectionLabel";
 import { Surface } from "@/components/Surface";
-import { api } from "@/lib/api";
+import { api, isoDate } from "@/lib/api";
 import { bmiCategory, bodyDelta, bodyValue, type BodyKey } from "@/lib/body";
 import { height as fmtHeight } from "@/lib/units";
 import { colors, font, fonts, radius, spacing } from "@/theme/tokens";
@@ -53,7 +53,7 @@ export default function BodyMetricScreen() {
   const q = useQuery({ queryKey: ["body"], queryFn: () => api.bodySummary(365) });
   const m = q.data?.metrics[metric];
   const [now] = useState(() => Date.now());
-  const cutoff = new Date(now - range.days * 86_400_000).toISOString().slice(0, 10);
+  const cutoff = isoDate(new Date(now - range.days * 86_400_000));
   const pts = (m?.series ?? []).filter((p) => p.date >= cutoff);
   const vals = pts.map((p) => Number(bodyValue(metric, p.value).value));
   const latest = bodyValue(metric, m?.latest?.value);

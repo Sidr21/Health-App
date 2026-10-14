@@ -10,6 +10,7 @@ import { SectionLabel } from "@/components/SectionLabel";
 import { Surface } from "@/components/Surface";
 import { api } from "@/lib/api";
 import { clockDuration, pace } from "@/lib/units";
+import { LTHR_SOURCE } from "@/lib/zones";
 import { colors, font, fonts, radius, spacing } from "@/theme/tokens";
 
 const METHOD: Record<string, string> = {
@@ -23,6 +24,8 @@ const METHOD: Record<string, string> = {
   friel: "30-min hard effort",
   hr_at_cs: "HR at critical speed",
   prior: "89% of HRmax (prior)",
+  effort_floor: "Hardest 10 min ÷ 1.06 (floor)",
+  race_result: "Your race result (VDOT)",
   performance: "from race-like efforts / critical speed",
   hr_pace_x_economy: "VO₂max × running economy",
   best_effort_floor: "your best recorded effort",
@@ -118,7 +121,7 @@ export default function FitnessModelsScreen() {
               label="Threshold heart rate (LTHR)"
               ours={m?.lthr ? `${Math.round(m.lthr.value)} bpm` : null}
               coros={null}
-              sub={m?.lthr ? (m.lthr.prior_only ? "prior only (89% HRmax)" : `range ${m.lthr.ci?.[0]}–${m.lthr.ci?.[1]}`) : null}
+              sub={m?.lthr ? (m.lthr.source === "ours" ? `range ${m.lthr.ci?.[0]}–${m.lthr.ci?.[1]}` : LTHR_SOURCE[m.lthr.source]) : null}
             />
             <Compare
               label="Threshold pace"
@@ -126,12 +129,20 @@ export default function FitnessModelsScreen() {
               coros={m?.threshold.coros_pace_s_per_km ? pace(m.threshold.coros_pace_s_per_km.value) : null}
               sub={m?.threshold.pace_method ? METHOD[m.threshold.pace_method] ?? m.threshold.pace_method : null}
             />
-            {m?.lthr?.prior_only ? (
+            {m?.lthr?.source === "prior" ? (
               <Note text="LTHR is still the 89% HRmax prior. A 30-minute steady hard effort, or hard 3–20 minute efforts across two runs (critical speed), replaces it." />
+            ) : m?.lthr?.source === "effort_floor" ? (
+              <Note tone="muted" text="LTHR is a floor from your hardest 10 continuous minutes (HR ÷ 1.06). A 30-minute steady hard run, or critical speed across two runs, measures it directly." />
             ) : null}
           </Surface>
+          <Surface style={styles.card} onPress={() => router.push("/zones")}>
+            <View style={styles.rowBetween}>
+              <Text style={styles.cardTitle}>Your training zones</Text>
+              <Text style={styles.method}>heart rate and pace ›</Text>
+            </View>
+          </Surface>
 
-          <SectionLabel title="Race predictions" />
+          <SectionLabel title="Race predictions" action={<Text style={styles.link} onPress={() => router.push("/races")}>Races ›</Text>} />
           <Surface style={styles.card}>
             <View style={styles.raceHead}>
               <Text style={[styles.colHead, { flex: 1 }]} />
@@ -194,5 +205,6 @@ const styles = StyleSheet.create({
   raceName: { ...font.heading, fontSize: 15, color: colors.text, flex: 1 },
   raceCol: { width: 92, alignItems: "flex-end", textAlign: "right" },
   raceTime: { fontFamily: fonts.numeral, fontSize: 20, color: colors.text },
+  link: { ...font.label, color: colors.textMuted },
   footer: { ...font.caption, color: colors.textFaint, textAlign: "center", marginTop: spacing.sm },
 });

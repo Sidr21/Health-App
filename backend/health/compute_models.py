@@ -10,7 +10,7 @@ import statistics
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from health.compute import _end_of_local_day, _local_day, _upsert_score, body_summary, hr_max_for
@@ -24,6 +24,7 @@ from health.models import (
     ActivitySample,
     Daily,
     FitnessEstimate,
+    Race,
     Score,
     SleepSession,
     StressSample,
@@ -111,6 +112,7 @@ def activity_load(s: Session, a: Activity, *, hr_max: float | None, sex: str | N
     return {
         "id": a.id,
         "sport": a.sport,
+        "sport_code": a.sport_code,
         "start": a.start_ts.replace(tzinfo=UTC).isoformat(),
         "end": (a.end_ts or a.start_ts + timedelta(seconds=a.duration_s or 0))
         .replace(tzinfo=UTC)
@@ -292,7 +294,7 @@ def store_stress_energy(s: Session, d: date, *, now: datetime | None = None) -> 
         ws = datetime.fromisoformat(w["start"]).astimezone(UTC).replace(tzinfo=None)
         we = datetime.fromisoformat(w["end"]).astimezone(UTC).replace(tzinfo=None)
         workouts.append((ws, we, w["trimp"]))
-    pts = en.energy_bank(wake, end, rec.value if rec else None, stress, workouts)
+    pts, drains = en.energy_bank_detail(wake, end, rec.value if rec else None, stress, workouts)
     hourly = [p for i, p in enumerate(pts) if i % 6 == 0 or i == len(pts) - 1]
     _upsert_score(
         s,
@@ -311,10 +313,59 @@ def store_stress_energy(s: Session, d: date, *, now: datetime | None = None) -> 
                 for p in hourly
             ],
             "workout_trimp": round(sum(w[2] for w in workouts), 1),
+            "drains": drains,
         },
     )
     out["energy"] = pts[-1].value
     return out
+
+
+STRESS_LEVELS = [(0, "Rest"), (26, "Low"), (51, "Medium"), (76, "High")]  # COROS's bands
+
+
+def stress_day(s: Session, d: date) -> dict:
+    """COROS stress samples for one local day (local times), sleep windows and minutes per
+    level while awake."""
+    zone = ZoneInfo(settings.timezone)
+    day_lo = _utc_naive(datetime.combine(d, datetime.min.time()))
+    day_hi = _end_of_local_day(d)
+    rows = s.execute(
+        select(StressSample)
+        .where(StressSample.ts >= day_lo, StressSample.ts < day_hi)
+        .order_by(StressSample.ts)
+    ).scalars()
+    samples = [(r.ts, r.stress) for r in rows if r.stress is not None and r.stress >= 0]
+
+    def local(ts: datetime) -> str:
+        return ts.replace(tzinfo=UTC).astimezone(zone).isoformat()
+
+    sleeps = []
+    for sd in (d, d + timedelta(days=1)):
+        sl = s.execute(
+            select(SleepSession).where(SleepSession.date == sd, SleepSession.is_nap.is_(False))
+        ).scalar_one_or_none()
+        if sl and sl.start_ts and sl.end_ts:
+            sleeps.append((_utc_naive(sl.start_ts), _utc_naive(sl.end_ts)))
+    minutes = {name: 0.0 for _, name in STRESS_LEVELS}
+    for (ts, v), nxt in zip(samples, [*samples[1:], None], strict=False):
+        if any(a <= ts < b for a, b in sleeps):
+            continue
+        dur = 5.0 if nxt is None else min(15.0, (nxt[0] - ts).total_seconds() / 60)
+        name = [n for lo, n in STRESS_LEVELS if v >= lo][-1]
+        minutes[name] += dur
+    score = s.execute(
+        select(Score).where(Score.date == d, Score.kind == "stress")
+    ).scalar_one_or_none()
+    return {
+        "date": d.isoformat(),
+        "samples": [{"t": local(ts), "v": v} for ts, v in samples],
+        "asleep": [{"start": local(a), "end": local(b)} for a, b in sleeps],
+        "levels": [
+            {"name": n, "from": lo, "minutes": round(minutes[n])} for lo, n in STRESS_LEVELS
+        ],
+        "awake_mean": score.value if score else None,
+        "high_minutes": (score.components or {}).get("high_minutes") if score else None,
+    }
 
 
 # ---------------------------------------------------------------- fitness models
@@ -361,6 +412,17 @@ def compute_fitness(s: Session, d: date) -> dict:
     result: dict = {"runs": len(runs), "runs_with_streams": 0, "hr_max": hm.value if hm else None}
     if hm is None:
         return result
+    # recompute from scratch: an estimator that no longer applies (a deleted race) must go
+    ours = ["vo2max", "critical_speed", "lthr", "threshold_pace", "hr_max"] + [
+        k for k, _, _ in RACES_M
+    ]
+    s.execute(
+        delete(FitnessEstimate).where(
+            FitnessEstimate.date == d,
+            FitnessEstimate.metric.in_(ours),
+            FitnessEstimate.method != "coros",
+        )
+    )
 
     per_run_vo2: list[tuple[float, float]] = []
     run_info = []
@@ -368,6 +430,7 @@ def compute_fitness(s: Session, d: date) -> dict:
     lower_bounds: list[tuple[float, dict]] = []
     cs_points: dict[int, tuple[float, float, int]] = {}
     friel: list[tuple[float, float, int]] = []
+    floors: list[tuple[float, int]] = []
     all_windows: list[fit.Window] = []
     for a in runs:
         rows = _rows(_stream(s, a.id))
@@ -404,6 +467,9 @@ def compute_fitness(s: Session, d: date) -> dict:
                 cur = cs_points.get(int(e.seconds))
                 if cur is None or e.distance_m > cur[1]:
                     cs_points[int(e.seconds)] = (e.seconds, e.distance_m, a.id)
+        fl = fit.lthr_floor(rows)
+        if fl:
+            floors.append((fl, a.id))
         fr = fit.friel_lthr(rows, hm.value)
         if fr:
             friel.append((fr[0], fr[1], a.id))
@@ -423,6 +489,18 @@ def compute_fitness(s: Session, d: date) -> dict:
         parts.append(
             fit.Estimate("critical_speed", cs_vo2, 3.0, {"cs": cs.cs, "d_prime": cs.d_prime})
         )
+    entered = race_results(s, d)
+    if entered:
+        v, r, sd = entered[0]
+        parts.append(
+            fit.Estimate(
+                "race_result",
+                v,
+                sd,
+                {"race": r.id, "date": r.date.isoformat(), "distance_m": r.distance_m},
+            )
+        )
+        race = (v, {"race": r.id})  # an entered race outranks a race-like training effort
     lb = max(lower_bounds, key=lambda x: x[0]) if lower_bounds else None
     vo2 = fit.blend(parts)
     for p in parts:
@@ -497,7 +575,19 @@ def compute_fitness(s: Session, d: date) -> dict:
         lthr_parts.append(
             fit.Estimate("hr_at_cs", round(a_ + b_ * cs.cs, 1), max(3.0, sd), {"cs": cs.cs})
         )
-    lthr_parts.append(fit.Estimate("prior", round(0.89 * hm.value, 1), 8.0, {"hr_max": hm.value}))
+    prior = round(0.89 * hm.value, 1)
+    floor = max(floors) if floors else None
+    if floor and floor[0] > prior:
+        lthr_parts.append(
+            fit.Estimate(
+                "effort_floor",
+                floor[0],
+                5.0,
+                {"activity": floor[1], "ratio": fit.FLOOR_RATIO, "prior": prior},
+            )
+        )
+    else:
+        lthr_parts.append(fit.Estimate("prior", prior, 8.0, {"hr_max": hm.value}))
     lthr = fit.blend(lthr_parts)
     for p in lthr_parts:
         _upsert_fit(s, d, "lthr", p.method, p.value, inputs=p.inputs)
@@ -537,6 +627,24 @@ def compute_fitness(s: Session, d: date) -> dict:
     return result
 
 
+RACE_WINDOW_DAYS = 180
+
+
+def race_results(s: Session, d: date) -> list[tuple[float, Race, float]]:
+    """Entered races in the 180 days up to `d` as (VDOT, race, SD), most useful first: the
+    SD grows 1 point per 60 days since the race, so an old PR gives way to a recent race."""
+    rows = s.execute(
+        select(Race).where(Race.date <= d, Race.date > d - timedelta(days=RACE_WINDOW_DAYS))
+    ).scalars()
+    out = []
+    for r in rows:
+        if not (1500 <= r.distance_m <= 42500) or r.time_s <= 0:
+            continue
+        v = fit.vdot(r.distance_m, r.time_s)
+        out.append((v, r, round(1.5 + (d - r.date).days / 60, 2)))
+    return sorted(out, key=lambda x: x[0] - 2 * x[2], reverse=True)
+
+
 RACES_M = [
     ("race_5k", "5K", 5000.0),
     ("race_10k", "10K", 10000.0),
@@ -570,7 +678,9 @@ def _met_minutes(a: Activity) -> float:
     return met * a.duration_s / 60
 
 
-def compute_bioage(s: Session, d: date) -> dict | None:
+def compute_bioage(s: Session, d: date, *, require_vo2: bool = False) -> dict | None:
+    """Bio age from the 30 days up to `d`. With `require_vo2`, skip days that have no VO₂max
+    yet, so a history doesn't jump when the fitness term arrives."""
     user = _user(s)
     if user is None or user.dob is None:
         return None
@@ -616,6 +726,8 @@ def compute_bioage(s: Session, d: date) -> dict | None:
     body = body_summary(s, d, 365)["metrics"]
     latest = latest_fitness(s, d)
     vo2_row = latest.get(("vo2max", "blend")) or latest.get(("vo2max", "coros"))
+    if require_vo2 and vo2_row is None:
+        return None
     inputs = bio.BioAgeInputs(
         age=age,
         sex=user.sex,
@@ -641,6 +753,16 @@ def compute_bioage(s: Session, d: date) -> dict | None:
         },
         "vo2max_source": vo2_row.method if vo2_row else None,
         "window_days": 30,
+        "norms": {
+            "vo2max": round(bio.vo2_norm(age, user.sex), 1),
+            "rhr": bio.RHR_NORM[bio.sex_key(user.sex)],
+            "hrv_ms": round(max(15.0, 75 - 0.75 * age), 1),
+            "bmi": [18.5, 25.0],
+            "body_fat_pct": [None, 20.0 if bio.sex_key(user.sex) == "male" else 28.0],
+            "sleep_h": [7.0, 9.0],
+            "sleep_score": 70.0,
+            "met_min_week": [500.0, 1000.0],
+        },
     }
     _upsert_fit(s, d, "bio_age", "v1", r.value, inputs=payload)
     return {"value": r.value, **payload}
@@ -654,6 +776,13 @@ def compute_models(s: Session, end: date, start: date | None = None) -> dict:
     while d <= end:
         store_stress_energy(s, d)
         d += timedelta(days=1)
+    # weekly history (Mondays) so VO2max, LTHR and bio age have trends, then `end` itself
+    weekly = 0
+    d = start + timedelta(days=(7 - start.weekday()) % 7)
+    while d < end:
+        compute_fitness(s, d)
+        weekly += compute_bioage(s, d, require_vo2=True) is not None
+        d += timedelta(days=7)
     f = compute_fitness(s, end)
     b = compute_bioage(s, end)
-    return {"days": n, "fitness": f, "bio_age": b}
+    return {"days": n, "fitness": f, "bio_age": b, "weekly_bio_age": weekly}

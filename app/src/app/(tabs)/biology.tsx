@@ -3,6 +3,8 @@ import { router } from "expo-router";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
+import type { VitalKey } from "@/lib/vitals";
+import { ContributionBars } from "@/components/BioAge";
 import { Card } from "@/components/Card";
 import { Header, RoundButton } from "@/components/Header";
 import { DotsIcon } from "@/components/icons";
@@ -16,9 +18,9 @@ import { hms } from "@/lib/format";
 import { useDays } from "@/lib/useDays";
 import { colors, font, fonts, spacing } from "@/theme/tokens";
 
-function Tile({ title, value, unit, series, color, sub }: { title: string; value: string; unit?: string; series: (number | null)[]; color: string; sub?: string }) {
+function Tile({ title, value, unit, series, color, sub, metric }: { title: string; value: string; unit?: string; series: (number | null)[]; color: string; sub?: string; metric: VitalKey }) {
   return (
-    <Card style={styles.half}>
+    <Card style={styles.half} onPress={() => router.push({ pathname: "/vital/[metric]", params: { metric } })}>
       <Text style={styles.tileTitle}>{title}</Text>
       <Text style={styles.tileValue}>
         {value}
@@ -31,15 +33,6 @@ function Tile({ title, value, unit, series, color, sub }: { title: string; value
     </Card>
   );
 }
-
-const BIO_LABEL: Record<string, string> = {
-  vo2max: "VO₂max",
-  rhr: "Resting HR",
-  hrv: "HRV",
-  body: "Body composition",
-  sleep: "Sleep",
-  activity: "Activity",
-};
 
 function BioAgeCard() {
   const q = useQuery({ queryKey: ["bioage"], queryFn: api.bioage });
@@ -55,10 +48,8 @@ function BioAgeCard() {
   }
   const delta = b.delta ?? 0;
   const tone = delta <= -0.5 ? colors.recovery : delta >= 0.5 ? colors.recoveryRed : colors.textMuted;
-  const contribs = Object.entries(b.contributions ?? {}).sort((x, y) => Math.abs(y[1]) - Math.abs(x[1]));
-  const scale = Math.max(1, ...contribs.map(([, v]) => Math.abs(v)));
   return (
-    <Surface style={styles.bio}>
+    <Surface style={styles.bio} onPress={() => router.push("/bioage")}>
       <View style={styles.bioTop}>
         <Text style={styles.bioValue}>{b.value.toFixed(1)}<Text style={styles.tileUnit}> years</Text></Text>
         <View style={{ alignItems: "flex-end" }}>
@@ -69,28 +60,8 @@ function BioAgeCard() {
       {b.fitness_age != null ? (
         <Text style={styles.tileSub}>Fitness age {b.fitness_age.toFixed(1)} from VO₂max {String(b.inputs?.vo2max ?? "–")} ({b.vo2max_source === "coros" || b.vo2max_source === "COROS" ? "COROS" : "our estimate"})</Text>
       ) : null}
-      <View style={{ gap: 8, marginTop: 6 }}>
-        {contribs.map(([k, v]) => (
-          <View key={k} style={styles.contrib}>
-            <Text style={styles.contribLabel}>{BIO_LABEL[k] ?? k}</Text>
-            <View style={styles.contribTrack}>
-              <View style={styles.contribMid} />
-              <View
-                style={[
-                  styles.contribBar,
-                  {
-                    width: `${(Math.abs(v) / scale) * 50}%`,
-                    backgroundColor: v < 0 ? colors.recovery : colors.recoveryRed,
-                    ...(v < 0 ? { right: "50%" } : { left: "50%" }),
-                  },
-                ]}
-              />
-            </View>
-            <Text style={[styles.contribVal, { color: v < 0 ? colors.recovery : v > 0 ? colors.recoveryRed : colors.textMuted }]}>
-              {v > 0 ? "+" : ""}{v.toFixed(1)}
-            </Text>
-          </View>
-        ))}
+      <View style={{ marginTop: 6 }}>
+        <ContributionBars contributions={b.contributions ?? {}} />
       </View>
       <Text style={[styles.tileSub, { marginTop: 4, lineHeight: 16 }]}>
         Years each input adds or removes. Fitness weighs 45%; inputs without data are left out rather than guessed.
@@ -109,12 +80,12 @@ export default function BiologyScreen() {
       <Header centered title="Biology" left={<View style={{ width: 44 }} />} right={<RoundButton><DotsIcon size={20} color={colors.text} /></RoundButton>} />
       <SectionLabel title="Vitals" note="last 28 days" />
       <View style={styles.grid}>
-        <Tile title="Resting HRV" value={comps.hrv_ms != null ? comps.hrv_ms.toFixed(0) : "–"} unit="ms" series={q.days.map((d) => ((d.scores.recovery?.components as { hrv_ms?: number } | null)?.hrv_ms ?? null))} color={colors.recovery} />
-        <Tile title="Resting HR" value={latest?.daily.rhr != null ? String(latest.daily.rhr) : "–"} unit="bpm" series={q.days.map((d) => d.daily.rhr)} color={colors.cardio} />
-        <Tile title="Sleep HR" value={latest?.sleep?.hr_avg != null ? String(latest.sleep.hr_avg) : "–"} unit="bpm" series={q.days.map((d) => d.sleep?.hr_avg ?? null)} color={colors.sleep} />
-        <Tile title="Stress" value={latest?.daily.stress_avg != null ? String(latest.daily.stress_avg) : "–"} series={q.days.map((d) => d.daily.stress_avg)} color={colors.stress} sub="daily average" />
-        <Tile title="Time asleep" value={hms(latest?.sleep?.asleep_s)} series={q.days.map((d) => (d.sleep?.asleep_s != null ? d.sleep.asleep_s / 3600 : null))} color={colors.sleepDeep} />
-        <Tile title="Steps" value={latest?.daily.steps != null ? latest.daily.steps.toLocaleString() : "–"} series={q.days.map((d) => d.daily.steps)} color={colors.energy} />
+        <Tile metric="hrv" title="Resting HRV" value={comps.hrv_ms != null ? comps.hrv_ms.toFixed(0) : "–"} unit="ms" series={q.days.map((d) => ((d.scores.recovery?.components as { hrv_ms?: number } | null)?.hrv_ms ?? null))} color={colors.recovery} />
+        <Tile metric="rhr" title="Resting HR" value={latest?.daily.rhr != null ? String(latest.daily.rhr) : "–"} unit="bpm" series={q.days.map((d) => d.daily.rhr)} color={colors.cardio} />
+        <Tile metric="sleep_hr" title="Sleep HR" value={latest?.sleep?.hr_avg != null ? String(latest.sleep.hr_avg) : "–"} unit="bpm" series={q.days.map((d) => d.sleep?.hr_avg ?? null)} color={colors.sleep} />
+        <Tile metric="stress" title="Stress" value={latest?.daily.stress_avg != null ? String(latest.daily.stress_avg) : "–"} series={q.days.map((d) => d.daily.stress_avg)} color={colors.stress} sub="daily average" />
+        <Tile metric="asleep" title="Time asleep" value={hms(latest?.sleep?.asleep_s)} series={q.days.map((d) => (d.sleep?.asleep_s != null ? d.sleep.asleep_s / 3600 : null))} color={colors.sleepDeep} />
+        <Tile metric="steps" title="Steps" value={latest?.daily.steps != null ? latest.daily.steps.toLocaleString() : "–"} series={q.days.map((d) => d.daily.steps)} color={colors.energy} />
       </View>
       <SectionLabel title="Body" note={body.data?.metrics.weight_kg.latest ? `latest ${new Date(`${body.data.metrics.weight_kg.latest.date}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : undefined} />
       <View style={styles.grid}>
@@ -163,11 +134,5 @@ const styles = StyleSheet.create({
   bioTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" },
   bioValue: { ...font.number, fontSize: 40, color: colors.text },
   bioDelta: { fontFamily: fonts.numeral, fontSize: 20 },
-  contrib: { flexDirection: "row", alignItems: "center", gap: 8 },
-  contribLabel: { ...font.caption, color: colors.textMuted, width: 112 },
-  contribTrack: { flex: 1, height: 6, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.05)" },
-  contribMid: { position: "absolute", left: "50%", top: -2, width: 1, height: 10, backgroundColor: "rgba(255,255,255,0.18)" },
-  contribBar: { position: "absolute", top: 0, height: 6, borderRadius: 3 },
-  contribVal: { fontFamily: fonts.numeral, fontSize: 13, width: 36, textAlign: "right" },
   empty: { ...font.caption, color: colors.textFaint, marginTop: 10, lineHeight: 17 },
 });

@@ -66,6 +66,7 @@ export default function FitnessScreen() {
 
       <SectionLabel title="Training load" />
       <View style={styles.gauges}>
+        <Pressable onPress={() => router.push("/cardio-load")}>
         <Gauge
           title="Cardio"
           value={cardio ? Math.round(cardio.atl) : null}
@@ -75,6 +76,7 @@ export default function FitnessScreen() {
           status={cardio?.status ?? null}
           color={colors.cardio}
         />
+        </Pressable>
         <Gauge
           title="Muscular"
           value={strength.data ? Math.round(strength.data.load.acute) : null}

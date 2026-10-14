@@ -8,6 +8,7 @@ from datetime import date, timedelta
 import httpx
 from sqlalchemy import select
 
+from health.config import today_local
 from health.db import session_scope
 from health.models import Activity
 from health.sources.coros.mcp_client import CorosMcp
@@ -40,7 +41,7 @@ async def _download_fit(c: CorosMcp, label_id: str, sport_type: int) -> bytes | 
 async def sync_all(
     days: int = 30, *, with_laps: bool = True, fit_limit: int = 10
 ) -> dict[str, int]:
-    today = date.today()
+    today = today_local()
     start = today - timedelta(days=days)
     counts: dict[str, int] = {}
     async with CorosMcp() as c:

@@ -21,7 +21,9 @@ lower bound.
 Blend: inverse-variance weighted mean; each estimator carries its own SD.
 
 LTHR: Friel (last 20 min of a ≥ 30 min steady hard effort), HR at CS from the pooled HR–speed
-line of steady windows, and a 0.89 × HRmax prior with a wide SD, blended the same way.
+line of steady windows, and a 0.89 × HRmax prior with a wide SD, blended the same way. A hard
+effort also sets a floor: HR held for 10 continuous minutes is at most ~106 % of LTHR, so
+LTHR ≥ best 10-min HR / 1.06; the floor replaces the prior when it is higher.
 """
 
 from __future__ import annotations
@@ -262,6 +264,36 @@ class Effort:
     seconds: float
     avg_hr: float | None
     t0: float
+
+
+FLOOR_SECONDS = 600
+FLOOR_RATIO = 1.06  # a 10-min all-out effort averages ~104-106 % of LTHR
+
+
+def sustained_hr(rows: list[dict], seconds: int = FLOOR_SECONDS) -> float | None:
+    """Highest mean HR over `seconds` of continuous recording (no gap > 10 s)."""
+    rows = [r for r in _clean(rows) if r.get("hr")]
+    best = None
+    for seg in _segments(rows):
+        sub = [rows[k] for k in seg]
+        if not sub or sub[-1]["t"] - sub[0]["t"] < seconds:
+            continue
+        total, j = 0.0, 0
+        for i in range(len(sub)):
+            while j < len(sub) and sub[j]["t"] - sub[i]["t"] < seconds:
+                total += sub[j]["hr"]
+                j += 1
+            if j >= len(sub):
+                break
+            mean = total / (j - i)
+            best = mean if best is None else max(best, mean)
+            total -= sub[i]["hr"]
+    return round(best, 1) if best is not None else None
+
+
+def lthr_floor(rows: list[dict]) -> float | None:
+    h = sustained_hr(rows)
+    return round(h / FLOOR_RATIO, 1) if h else None
 
 
 def _segments(rows: list[dict]) -> list[list[int]]:

@@ -1,4 +1,4 @@
-import { clockDuration, distance, elevation, height, pace, setUnits } from "@/lib/units";
+import { clockDuration, distance, elevation, height, pace, parseClock, setUnits } from "@/lib/units";
 
 afterEach(() => setUnits("imperial"));
 
@@ -22,4 +22,18 @@ test("clock durations", () => {
   expect(clockDuration(2238)).toBe("37:18");
   expect(clockDuration(13333)).toBe("3:42:13");
   expect(clockDuration(null)).toBe("–");
+});
+
+describe("parseClock", () => {
+  it("reads mm:ss and h:mm:ss", () => {
+    expect(parseClock("20:00")).toBe(1200);
+    expect(parseClock("1:39:51")).toBe(5991);
+    expect(parseClock(" 45:03 ")).toBe(2703);
+  });
+  it("rejects malformed times", () => {
+    expect(parseClock("20")).toBeNull();
+    expect(parseClock("20:75")).toBeNull();
+    expect(parseClock("1:2:3:4")).toBeNull();
+    expect(parseClock("ab:cd")).toBeNull();
+  });
 });

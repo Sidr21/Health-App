@@ -32,6 +32,9 @@ export function LineChart({
   step = false,
   robust = false,
   id = "lc",
+  overlays,
+  rangeBand,
+  domain,
 }: {
   points: { x: number; y: number | null }[];
   color: string;
@@ -46,9 +49,19 @@ export function LineChart({
   /** scale the y axis to the 2nd–98th percentile so a stop or a GPS glitch can't flatten the curve */
   robust?: boolean;
   id?: string;
+  /** extra unfilled series on the same axes (e.g. fitness under fatigue) */
+  overlays?: { points: { x: number; y: number | null }[]; color: string; dashed?: boolean }[];
+  /** a band whose edges move with x (e.g. the optimal load range) */
+  rangeBand?: { points: { x: number; lo: number; hi: number }[]; color: string };
+  /** fixed y range instead of fitting the data (0–100 scores) */
+  domain?: [number, number];
 }) {
   const [w, onLayout] = useWidth();
-  const ys = points.map((p) => p.y).filter((v): v is number => v != null);
+  const ys = [
+    ...points.map((p) => p.y),
+    ...(overlays ?? []).flatMap((o) => o.points.map((p) => p.y)),
+    ...(rangeBand?.points ?? []).flatMap((p) => [p.lo, p.hi]),
+  ].filter((v): v is number => v != null);
   if (!ys.length) return <View style={{ height }} />;
   const left = 34;
   const top = 8;
@@ -57,9 +70,9 @@ export function LineChart({
   const plotH = height - top - bottom;
   const sorted = [...ys].sort((a, b) => a - b);
   const q = (f: number) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.round(f * (sorted.length - 1))))];
-  let lo = robust ? q(0.02) : sorted[0];
-  let hi = robust ? q(0.98) : sorted[sorted.length - 1];
-  const pad = Math.max(1, (hi - lo) * 0.12);
+  let lo = domain ? domain[0] : robust ? q(0.02) : sorted[0];
+  let hi = domain ? domain[1] : robust ? q(0.98) : sorted[sorted.length - 1];
+  const pad = domain ? 0 : Math.max(1, (hi - lo) * 0.12);
   lo -= pad;
   hi += pad;
   const xs = points.map((p) => p.x);
@@ -94,7 +107,26 @@ export function LineChart({
     d += seg;
     area += `${seg}L${X(run[run.length - 1].x).toFixed(1)} ${top + plotH}L${X(run[0].x).toFixed(1)} ${top + plotH}Z`;
   }
-  const ticks = [hi - pad, (hi + lo) / 2, lo + pad];
+  // data-extreme ticks read best, but in a narrow range their labels collide: use the axis ends
+  const tight = Y(lo + pad) - Y(hi - pad) < 36;
+  const ticks = tight ? [hi, (hi + lo) / 2, lo] : [hi - pad, (hi + lo) / 2, lo + pad];
+  const line = (pts: { x: number; y: number | null }[]) => {
+    let out = "";
+    let pen = false;
+    for (const p of pts) {
+      if (p.y == null) {
+        pen = false;
+        continue;
+      }
+      out += `${pen ? "L" : "M"}${X(p.x).toFixed(1)} ${Y(clampY(p.y)).toFixed(1)}`;
+      pen = true;
+    }
+    return out;
+  };
+  const rb = rangeBand?.points ?? [];
+  const bandPath = rb.length > 1
+    ? `${rb.map((p, i) => `${i ? "L" : "M"}${X(p.x).toFixed(1)} ${Y(clampY(p.hi)).toFixed(1)}`).join("")}${[...rb].reverse().map((p) => `L${X(p.x).toFixed(1)} ${Y(clampY(p.lo)).toFixed(1)}`).join("")}Z`
+    : "";
 
   return (
     <View onLayout={onLayout} style={{ height }}>
@@ -114,7 +146,11 @@ export function LineChart({
         {ticks.map((t, i) => (
           <Line key={i} x1={left} x2={left + plotW} y1={Y(t)} y2={Y(t)} stroke="rgba(255,255,255,0.06)" strokeDasharray="3 4" />
         ))}
+        {bandPath ? <Path d={bandPath} fill={rangeBand?.color} opacity={0.14} /> : null}
         <Path d={area} fill={`url(#${id}-fill)`} />
+        {(overlays ?? []).map((o, i) => (
+          <Path key={i} d={line(o.points)} stroke={o.color} strokeWidth={1.6} fill="none" strokeDasharray={o.dashed ? "4 4" : undefined} strokeLinejoin="round" />
+        ))}
         <Path d={d} stroke={color} strokeWidth={2} fill="none" strokeLinejoin="round" strokeLinecap="round" />
         {dots
           ? points.map((p, i) => (p.y != null ? <Circle key={i} cx={X(p.x)} cy={Y(clampY(p.y))} r={3.2} fill={color} /> : null))
