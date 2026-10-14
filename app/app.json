@@ -60,7 +60,8 @@
           "cameraPermission": "Health uses the camera to photograph lab reports and doctor's documents.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "./plugins/with-scene-lifecycle"
     ],
     "experiments": {
       "typedRoutes": true

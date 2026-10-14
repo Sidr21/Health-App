@@ -56,6 +56,9 @@ npx expo run:ios --device          # pick your iPhone; first build takes 5–15 
 - First launch: iOS refuses the app until you trust it: Settings → General → VPN & Device
   Management → your Apple ID → Trust.
 - Allow "Local Network" when asked: the app talks to the backend on your Mac over Wi-Fi.
+- iOS 27 SDK (Xcode 27+) requires the UIScene life cycle; `app/plugins/with-scene-lifecycle.js`
+  switches the generated project over. If the app stops at launch with "UIScene life cycle is
+  required", the `ios/` folder predates the plugin: `npx expo prebuild --platform ios --clean`.
 - The app only needs the HealthKit capability, which free accounts can sign. Don't add push
   notifications (paid accounts only); `expo-notifications` was removed for that reason.
 - Free provisioning expires after 7 days: re-run `npx expo run:ios --device`. Day to day,
