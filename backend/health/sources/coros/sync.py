@@ -13,7 +13,7 @@ from health.db import session_scope
 from health.models import Activity, ActivitySample
 from health.sources.coros.mcp_client import CorosMcp
 from health.sources.coros.parsers import SportRecord
-from health.sources.coros.store import import_text, log
+from health.sources.coros.store import import_text, log, unwrap
 from health.sources.fit import store_fit
 
 _SPORT_ALL = [65535]
@@ -113,7 +113,7 @@ async def sync_all(
             fit_wanted: list[tuple[Activity, SportRecord]] = []
             # a file without samples (stored by an older version) counts as missing
             streamed = set(s.execute(select(ActivitySample.activity_id).distinct()).scalars())
-            for r in parse_sport_records(records_text):
+            for r in parse_sport_records(unwrap(records_text)):  # often a JSON-quoted string
                 # each step on its own: a detail or lap reply we can't parse must not cost the
                 # activity its FIT file (the stream is what the models need most)
                 for tool in ("getActivityDetail", "queryActivityLapData")[: 2 if with_laps else 1]:

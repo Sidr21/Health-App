@@ -1,6 +1,7 @@
 """The daily FIT quota goes to runs first. Fake COROS, synthetic records."""
 
 import asyncio
+import json
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -41,7 +42,7 @@ class FakeCoros:
 
     async def call(self, tool, args=None):
         if tool == "querySportRecords":
-            return RECORDS
+            return json.dumps(RECORDS)  # the real server sends this one as a JSON string
         if tool == "queryActivityFitFileDownloadUrls":
             FakeCoros.asked.append(args["labelId"])
             return (

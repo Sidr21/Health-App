@@ -342,10 +342,17 @@ def store_user(s: Session, info: dict) -> User:
     return user
 
 
+def unwrap(text: str) -> str:
+    """COROS returns some tool results as a JSON-encoded string ("Sport Records —\\n..."):
+    decode it to the plain text the parsers read. Plain replies pass through."""
+    if text.startswith('"') and text.rstrip().endswith('"'):
+        return json.loads(text) if "\\n" in text else text.strip()[1:-1]
+    return text
+
+
 def import_text(s: Session, kind: str, text: str, *, label_id: str | None = None) -> int:
     """Route a raw tool output to the right parser + store. `kind` = tool name without prefix."""
-    if text.startswith('"') and text.rstrip().endswith('"'):
-        text = json.loads(text) if "\\n" in text else text.strip()[1:-1]
+    text = unwrap(text)
     save_raw(kind, text, suffix="json" if kind == "queryActivityLapData" else "txt")
     match kind:
         case "querySportRecords":
