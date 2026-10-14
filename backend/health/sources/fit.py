@@ -135,6 +135,9 @@ def store_fit(s: Session, activity: Activity, data: bytes) -> int:
     """Replace the activity's samples with the file's stream. Laps from the file are used only
     when COROS sent none; the session summary fills stats the activity record lacks."""
     parsed = parse_fit(data)
+    if not parsed.samples:
+        # e.g. a stub file; storing it would mark the activity done and it'd never be retried
+        raise ValueError(f"FIT file has no records ({len(data)} bytes)")
     path = settings.raw_dir / "fit" / f"{activity.source}_{activity.external_id}.fit"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)

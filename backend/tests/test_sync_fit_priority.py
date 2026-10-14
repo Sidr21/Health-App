@@ -69,3 +69,43 @@ def test_fit_quota_goes_to_runs_first(tmp_db, monkeypatch):
     with session_scope() as s:
         have = {a.external_id for a in s.execute(select(Activity)).scalars() if a.fit_path}
     assert have == {"9004", "9005"}
+
+
+def test_a_file_without_samples_is_fetched_again(tmp_db, monkeypatch):
+    """An older version could mark a run done with an empty file; the next sync retries it."""
+    from sqlalchemy import delete
+
+    from health.db import session_scope
+    from health.models import Activity, ActivitySample
+
+    fit = synthetic_run(datetime(2026, 10, 8, 7, tzinfo=UTC), minutes=12)
+
+    async def fetch(url):
+        return fit
+
+    monkeypatch.setattr(sync, "CorosMcp", FakeCoros)
+    monkeypatch.setattr(sync, "fetch_fit", fetch)
+    asyncio.run(sync.sync_all(10, with_laps=False, fit_limit=2))
+    with session_scope() as s:
+        run = s.execute(select(Activity).where(Activity.external_id == "9004")).scalar_one()
+        s.execute(delete(ActivitySample).where(ActivitySample.activity_id == run.id))
+    FakeCoros.asked = []
+    asyncio.run(sync.sync_all(10, with_laps=False, fit_limit=1))
+    assert FakeCoros.asked == ["9004"]
+
+
+def test_an_empty_fit_file_is_not_stored(tmp_db):
+    import pytest
+
+    from health.db import session_scope
+    from health.models import Activity
+    from health.sources.fit import store_fit
+    from tests.fitwriter import write_fit
+
+    with session_scope() as s:
+        a = Activity(source="coros", external_id="1", sport="Run", start_ts=datetime(2026, 10, 1))
+        s.add(a)
+        s.flush()
+        with pytest.raises(ValueError, match="no records"):
+            store_fit(s, a, write_fit(datetime(2026, 10, 1, tzinfo=UTC), []))
+        assert a.fit_path is None

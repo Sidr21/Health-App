@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from health.config import today_local
 from health.db import session_scope
-from health.models import Activity
+from health.models import Activity, ActivitySample
 from health.sources.coros.mcp_client import CorosMcp
 from health.sources.coros.parsers import SportRecord
 from health.sources.coros.store import import_text, log
@@ -111,6 +111,8 @@ async def sync_all(
             from health.sources.coros.parsers import parse_sport_records
 
             fit_wanted: list[tuple[Activity, SportRecord]] = []
+            # a file without samples (stored by an older version) counts as missing
+            streamed = set(s.execute(select(ActivitySample.activity_id).distinct()).scalars())
             for r in parse_sport_records(records_text):
                 # each step on its own: a detail or lap reply we can't parse must not cost the
                 # activity its FIT file (the stream is what the models need most)
@@ -127,7 +129,7 @@ async def sync_all(
                         Activity.source == "coros", Activity.external_id == r.label_id
                     )
                 ).scalar_one_or_none()
-                if act is not None and not act.fit_path:
+                if act is not None and (not act.fit_path or act.id not in streamed):
                     fit_wanted.append((act, r))
             # COROS caps FIT downloads per day (asking for the URL counts): spend them on runs
             # first, whose streams the fitness models need, newest first; then everything else
