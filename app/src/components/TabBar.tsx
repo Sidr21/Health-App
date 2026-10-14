@@ -4,7 +4,7 @@ import React, { useState, type ComponentType } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { DumbbellIcon, HeartIcon, HomeIcon, JournalIcon, PlusIcon, RouteIcon, RunnerIcon, type IconProps } from "@/components/icons";
+import { DocIcon, DumbbellIcon, HeartIcon, HomeIcon, JournalIcon, PlusIcon, RouteIcon, RunnerIcon, type IconProps } from "@/components/icons";
 import { MenuSheet } from "@/components/Sheet";
 import { colors, font, radius } from "@/theme/tokens";
 
@@ -73,6 +73,7 @@ export function TabBar({ state, descriptors, navigation }: TabBarProps) {
           { label: "Log a lift", sub: "Sets, reps and weight", icon: DumbbellIcon, color: colors.muscular, onPress: () => router.push("/strength/log") },
           { label: "Journal entry", sub: "Caffeine, alcohol, mood…", icon: JournalIcon, color: colors.gold, onPress: () => navigation.navigate("journal") },
           { label: "Race result", sub: "Calibrates VO₂max and predictions", icon: RouteIcon, color: colors.cardio, onPress: () => router.push("/races") },
+          { label: "Lab report", sub: "Blood work or a doctor's document", icon: DocIcon, color: colors.recovery, onPress: () => router.push({ pathname: "/labs", params: { upload: "1" } }) },
         ]}
       />
     </View>

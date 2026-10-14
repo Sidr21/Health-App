@@ -115,6 +115,19 @@ fly secrets set HEALTH_COROS_TOKEN_JSON="$(cat data/coros_oauth.json)"   # resta
 The secret is only used when the server has no token file, so refreshed tokens on the volume
 are never overwritten by an old secret.
 
+**Lab reports and doctor's documents.** Uploads (Biology → Labs, or the + button) are read by
+Claude through the Anthropic API, so the server needs an API key from
+[console.anthropic.com](https://console.anthropic.com):
+```bash
+fly secrets set ANTHROPIC_API_KEY=sk-ant-...      # locally: ANTHROPIC_API_KEY=... in backend/.env
+```
+Without it, uploads are kept and marked "couldn't read it" with a message saying the key is
+missing; add the key and tap Try again. A 14-page report costs roughly $0.20–0.50 to read
+(`HEALTH_DOCUMENTS_EFFORT=low` makes it cheaper, `high` more careful). The document goes to
+Anthropic's API for reading (API inputs aren't used for training) and is stored on your
+volume under `/data/documents/`. To try it on the Mac without the app:
+`uv run health docs add ~/Downloads/report.pdf` prints what it read and leaves it for review.
+
 Backups: Fly snapshots the volume daily (kept 5 days); `fly volumes snapshots list`.
 Anywhere else: the same image runs with Docker (`docker compose up -d --build` from the repo
 root) as long as `/data` is persistent and `HEALTH_SYNC_INTERVAL_MIN` is set.

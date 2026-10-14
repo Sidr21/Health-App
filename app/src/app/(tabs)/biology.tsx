@@ -7,7 +7,8 @@ import type { VitalKey } from "@/lib/vitals";
 import { ContributionBars } from "@/components/BioAge";
 import { Card } from "@/components/Card";
 import { Header, RoundButton } from "@/components/Header";
-import { DotsIcon, HeartIcon, LeafIcon, PulseIcon, SparkleIcon } from "@/components/icons";
+import { ChevronRight, DocIcon, DotsIcon, FlaskIcon, HeartIcon, LeafIcon, PulseIcon, SparkleIcon } from "@/components/icons";
+import { RangeBar } from "@/components/RangeBar";
 import { Screen } from "@/components/Screen";
 import { MenuSheet } from "@/components/Sheet";
 import { SectionLabel } from "@/components/SectionLabel";
@@ -16,6 +17,7 @@ import { Surface } from "@/components/Surface";
 import { api } from "@/lib/api";
 import { bmiCategory, bodyDelta, bodyValue, displaySeries, type BodyKey } from "@/lib/body";
 import { hms } from "@/lib/format";
+import { flagColor, flagLabel, shown } from "@/lib/labs";
 import { useDays } from "@/lib/useDays";
 import { colors, font, fonts, spacing } from "@/theme/tokens";
 
@@ -71,6 +73,53 @@ function BioAgeCard() {
   );
 }
 
+function LabsCard() {
+  const labs = useQuery({ queryKey: ["labs"], queryFn: api.labs });
+  const docs = useQuery({ queryKey: ["documents"], queryFn: api.documents });
+  const markers = labs.data?.markers ?? [];
+  const toReview = (docs.data ?? []).filter((d) => d.status === "review").length;
+  const flagged = markers.filter((m) => flagLabel(m.flag));
+  const newest = markers.reduce<string | null>((a, m) => (m.date && (!a || m.date > a) ? m.date : a), null);
+  if (!markers.length) {
+    return (
+      <Surface style={styles.labs} onPress={() => router.push("/labs")}>
+        <View style={styles.labsHead}>
+          <FlaskIcon size={18} color={colors.recovery} />
+          <Text style={[styles.tileTitle, { flex: 1 }]}>{toReview ? `${toReview} document${toReview > 1 ? "s" : ""} to review` : "Add your blood work"}</Text>
+          <ChevronRight size={14} color={colors.textFaint} />
+        </View>
+        <Text style={styles.tileSub}>A PDF or photos of a lab report or doctor&apos;s note. Results are read for you, checked by you, and charted across reports.</Text>
+      </Surface>
+    );
+  }
+  return (
+    <Surface style={styles.labs} onPress={() => router.push("/labs")}>
+      <View style={styles.labsHead}>
+        <Text style={[styles.tileTitle, { flex: 1 }]}>
+          {markers.length} markers{newest ? ` · latest ${new Date(`${newest}T00:00:00`).toLocaleDateString(undefined, { month: "short", year: "numeric" })}` : ""}
+        </Text>
+        {toReview ? <Text style={[styles.tileSub, { color: colors.recoveryAmber }]}>{toReview} to review</Text> : null}
+        <ChevronRight size={14} color={colors.textFaint} />
+      </View>
+      {flagged.length ? (
+        flagged.slice(0, 4).map((m) => {
+          const v = shown(m);
+          return (
+            <View key={m.analyte} style={styles.labRow}>
+              <Text style={[styles.tileSub, { flex: 1, color: colors.text }]} numberOfLines={1}>{m.label}</Text>
+              <RangeBar value={v.num} lo={v.lo} hi={v.hi} color={flagColor(m.flag)} width={64} />
+              <Text style={[styles.labVal, { color: flagColor(m.flag) }]}>{v.value}<Text style={styles.tileSub}> {v.unit}</Text></Text>
+            </View>
+          );
+        })
+      ) : (
+        <Text style={styles.tileSub}>Every marker in range on its latest result.</Text>
+      )}
+      {flagged.length > 4 ? <Text style={styles.tileSub}>and {flagged.length - 4} more out of range</Text> : null}
+    </Surface>
+  );
+}
+
 export default function BiologyScreen() {
   const [menu, setMenu] = useState(false);
   const q = useDays(28);
@@ -117,6 +166,8 @@ export default function BiologyScreen() {
           );
         })}
       </View>
+      <SectionLabel title="Labs" />
+      <LabsCard />
       <SectionLabel title="Biological age" />
       <BioAgeCard />
       <MenuSheet
@@ -127,6 +178,8 @@ export default function BiologyScreen() {
           { label: "HRV trend", icon: PulseIcon, color: colors.recovery, onPress: () => router.push({ pathname: "/vital/[metric]", params: { metric: "hrv" } }) },
           { label: "Resting HR trend", icon: HeartIcon, color: colors.cardio, onPress: () => router.push({ pathname: "/vital/[metric]", params: { metric: "rhr" } }) },
           { label: "Weight", icon: LeafIcon, color: colors.sleepRem, onPress: () => router.push({ pathname: "/body/[metric]", params: { metric: "weight_kg" } }) },
+          { label: "Labs", sub: "Blood work and doctor's documents", icon: FlaskIcon, color: colors.recovery, onPress: () => router.push("/labs") },
+          { label: "Add a lab report", sub: "PDF or photos", icon: DocIcon, color: colors.recovery, onPress: () => router.push({ pathname: "/labs", params: { upload: "1" } }) },
           { label: "Connections", sub: "Apple Health, COROS", icon: LeafIcon, color: colors.textMuted, onPress: () => router.push("/connections") },
         ]}
       />
@@ -144,6 +197,10 @@ const styles = StyleSheet.create({
   body: { ...font.body, color: colors.textMuted, lineHeight: 21 },
   bodyTile: { minHeight: 128, marginBottom: spacing.md },
   bio: { gap: 6, marginBottom: spacing.md },
+  labs: { gap: 10, marginBottom: spacing.md },
+  labsHead: { flexDirection: "row", alignItems: "center", gap: 8 },
+  labRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  labVal: { fontFamily: fonts.numeral, fontSize: 17, minWidth: 70, textAlign: "right" },
   bioTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" },
   bioValue: { ...font.number, fontSize: 40, color: colors.text },
   bioDelta: { fontFamily: fonts.numeral, fontSize: 20 },

@@ -1,22 +1,25 @@
 /** Bottom sheets: an action menu (⋯ and + buttons) and a month calendar for picking a day. */
 import React, { useState, type ComponentType } from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ChevronLeft } from "@/components/icons";
 import type { IconProps } from "@/components/icons";
 import { colors, font, fonts, radius, spacing } from "@/theme/tokens";
 
-function SheetFrame({ visible, onClose, title, children }: { visible: boolean; onClose: () => void; title?: string; children: React.ReactNode }) {
+/** The bottom-sheet chrome: scrim, grabber and title. Sheets with text inputs lift above the keyboard. */
+export function SheetFrame({ visible, onClose, title, children }: { visible: boolean; onClose: () => void; title?: string; children: React.ReactNode }) {
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.scrim} onPress={onClose} accessibilityLabel="Close" />
-      <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.md) + spacing.sm }]}>
-        <View style={styles.grabber} />
-        {title ? <Text style={styles.title}>{title}</Text> : null}
-        {children}
-      </View>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <Pressable style={styles.scrim} onPress={onClose} accessibilityLabel="Close" />
+        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.md) + spacing.sm }]}>
+          <View style={styles.grabber} />
+          {title ? <Text style={styles.title}>{title}</Text> : null}
+          {children}
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

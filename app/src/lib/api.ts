@@ -362,18 +362,103 @@ export interface LogSessionIn {
   sets: LogSetIn[];
 }
 
+export type LabFlag = "low" | "high" | "normal" | "abnormal" | "critical_low" | "critical_high";
+export type DocStatus = "processing" | "review" | "confirmed" | "failed";
+
+export interface LabResultOut {
+  id: number;
+  analyte: string;
+  known: boolean;
+  label: string;
+  category: string;
+  name: string;
+  panel: string | null;
+  date: string | null;
+  value: number | null;
+  value_text: string | null;
+  unit: string | null;
+  ref_low: number | null;
+  ref_high: number | null;
+  ref_text: string | null;
+  value_std: number | null;
+  unit_std: string | null;
+  ref_low_std: number | null;
+  ref_high_std: number | null;
+  flag: LabFlag | null;
+  flag_source: "printed" | "range" | "none" | null;
+  method: string | null;
+  issue: string | null;
+  page: number | null;
+  included: boolean;
+}
+
+export interface DocumentOut {
+  id: number;
+  uploaded_at: string;
+  status: DocStatus;
+  error: string | null;
+  kind: string | null;
+  title: string | null;
+  provider: string | null;
+  collected_on: string | null;
+  summary: string | null;
+  files: { name: string; mime: string; size: number }[];
+  model: string | null;
+  usage: { input_tokens: number; output_tokens: number } | null;
+  duplicate?: boolean;
+  result_count?: number;
+  flagged_count?: number;
+  results?: LabResultOut[];
+  notes?: { title: string; text: string }[];
+}
+
+export interface LabMarker extends LabResultOut {
+  count: number;
+  previous: { date: string | null; value_std: number | null; value: number | null } | null;
+}
+
+export interface LabHistory {
+  analyte: string;
+  label: string;
+  category: string;
+  unit: string | null;
+  results: (LabResultOut & { document_id: number })[];
+}
+
+/** A file for multipart upload: a native file URI, or a browser File on web. */
+export interface UploadFile {
+  uri: string;
+  name: string;
+  type: string;
+  file?: Blob;
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
   }
 }
 
+/** The `detail` of a FastAPI error body, else the raw text. */
+export function errorText(e: unknown): string {
+  if (!(e instanceof Error)) return String(e);
+  try {
+    const detail = (JSON.parse(e.message) as { detail?: unknown }).detail;
+    if (typeof detail === "string") return detail;
+  } catch {
+    // not JSON
+  }
+  return e.message;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // multipart bodies need fetch to set the Content-Type itself (it adds the boundary)
+  const json = !(typeof FormData !== "undefined" && init?.body instanceof FormData);
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${API_TOKEN}`,
-      "Content-Type": "application/json",
+      ...(json ? { "Content-Type": "application/json" } : {}),
       ...(init?.headers ?? {}),
     },
   });
@@ -425,6 +510,23 @@ export const api = {
     request<{ session_key: string; sets: number }>("/strength/sessions", { method: "POST", body: JSON.stringify(body) }),
   deleteStrength: (key: string, source = "manual") =>
     request<{ deleted: number }>(`/strength/sessions/${encodeURIComponent(key)}?source=${source}`, { method: "DELETE" }),
+  documents: () => request<DocumentOut[]>("/documents"),
+  document: (id: number | string) => request<DocumentOut>(`/documents/${id}`),
+  uploadDocument: (files: UploadFile[]) => {
+    const form = new FormData();
+    for (const f of files) {
+      // React Native's FormData takes {uri, name, type}; the browser takes a Blob
+      form.append("files", f.file ?? ({ uri: f.uri, name: f.name, type: f.type } as unknown as Blob), f.name);
+    }
+    return request<DocumentOut>("/documents", { method: "POST", body: form });
+  },
+  patchLabResult: (docId: number, resultId: number, body: Partial<{ included: boolean; value: number; unit: string; ref_low: number | null; ref_high: number | null; analyte: string }>) =>
+    request<LabResultOut>(`/documents/${docId}/results/${resultId}`, { method: "PATCH", body: JSON.stringify(body) }),
+  confirmDocument: (id: number) => request<DocumentOut>(`/documents/${id}/confirm`, { method: "POST" }),
+  retryDocument: (id: number) => request<DocumentOut>(`/documents/${id}/retry`, { method: "POST" }),
+  deleteDocument: (id: number) => request<{ deleted: number }>(`/documents/${id}`, { method: "DELETE" }),
+  labs: () => request<{ markers: LabMarker[]; categories: string[]; flagged: number }>("/labs"),
+  labHistory: (analyte: string) => request<LabHistory>(`/labs/${encodeURIComponent(analyte)}`),
   ingestAppleHealth: (samples: HKSampleOut[]) =>
     request<{ stored: number; skipped: number; unknown_type: number }>("/ingest/apple-health", {
       method: "POST",

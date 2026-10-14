@@ -238,6 +238,58 @@ class Race(Base):
     activity_id: Mapped[int | None] = mapped_column(Integer)
 
 
+class MedicalDocument(Base):
+    """An uploaded lab report or doctor's document: the file(s), what the model read from
+    them, and where the user is in reviewing it (processing -> review -> confirmed)."""
+
+    __tablename__ = "documents"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime)
+    sha256: Mapped[str] = mapped_column(String(64), unique=True)  # of the files, in order
+    files: Mapped[list] = mapped_column(JSON)  # [{name, path, mime, size}]
+    status: Mapped[str] = mapped_column(String(12))  # processing|review|confirmed|failed
+    error: Mapped[str | None] = mapped_column(String(500))
+    kind: Mapped[str | None] = mapped_column(String(20))  # lab_report|doctor_note|imaging|...
+    title: Mapped[str | None] = mapped_column(String(200))
+    provider: Mapped[str | None] = mapped_column(String(200))
+    collected_on: Mapped[date | None] = mapped_column(Date, index=True)
+    summary: Mapped[str | None] = mapped_column(String(2000))
+    notes: Mapped[list | None] = mapped_column(JSON)  # [{title, text}] for non-numeric content
+    model: Mapped[str | None] = mapped_column(String(60))
+    usage: Mapped[dict | None] = mapped_column(JSON)  # tokens in/out of the extraction
+    extracted: Mapped[dict | None] = mapped_column(JSON)  # the model's raw answer, for audit
+
+
+class LabResult(Base):
+    """One measured value from a document. value/unit/ref are as printed; *_std are in the
+    analyte's canonical unit (engine/labs.py) with `method` saying how."""
+
+    __tablename__ = "lab_results"
+    __table_args__ = (Index("ix_lab_analyte_date", "analyte", "date"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"))
+    date: Mapped[date | None] = mapped_column(Date)
+    analyte: Mapped[str] = mapped_column(String(80))  # catalog key or other:<slug>
+    name: Mapped[str] = mapped_column(String(200))  # as printed
+    panel: Mapped[str | None] = mapped_column(String(200))
+    value: Mapped[float | None] = mapped_column(Float)
+    value_text: Mapped[str | None] = mapped_column(String(200))  # e.g. "Negative", "<0.5"
+    unit: Mapped[str | None] = mapped_column(String(40))
+    ref_low: Mapped[float | None] = mapped_column(Float)
+    ref_high: Mapped[float | None] = mapped_column(Float)
+    ref_text: Mapped[str | None] = mapped_column(String(300))
+    value_std: Mapped[float | None] = mapped_column(Float)
+    unit_std: Mapped[str | None] = mapped_column(String(40))
+    ref_low_std: Mapped[float | None] = mapped_column(Float)
+    ref_high_std: Mapped[float | None] = mapped_column(Float)
+    flag: Mapped[str | None] = mapped_column(String(16))
+    flag_source: Mapped[str | None] = mapped_column(String(10))  # printed|range|none
+    method: Mapped[str | None] = mapped_column(String(120))  # how value_std was derived
+    issue: Mapped[str | None] = mapped_column(String(300))  # why to double-check it
+    page: Mapped[int | None] = mapped_column(Integer)
+    included: Mapped[bool] = mapped_column(default=True)  # the reviewer can drop a row
+
+
 class Score(Base):
     __tablename__ = "scores"
     __table_args__ = (UniqueConstraint("date", "kind", name="uq_score_date_kind"),)

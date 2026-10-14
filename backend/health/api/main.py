@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from health import __version__
 from health.api.auth import require_token
+from health.api.documents import router as documents_router
 from health.compute import (
     body_summary,
     fitness_models,
@@ -50,6 +51,9 @@ async def _lifespan(_: FastAPI):
     check_public_token()
     init_db()
     from health import scheduler
+    from health.sources.documents import recover_interrupted
+
+    recover_interrupted()
 
     scheduler.seed_coros_token()
     task = None
@@ -70,6 +74,7 @@ app = FastAPI(
 )
 # The native app does not need CORS; the Expo web preview does. Auth is the bearer token.
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.include_router(documents_router)
 
 
 @app.get("/health")

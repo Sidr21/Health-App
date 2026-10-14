@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,6 +34,13 @@ class Settings(BaseSettings):
     public: bool = False  # internet-facing deploy: refuse to start with a weak API token
     public_url: str | None = None  # e.g. https://health-sidr21.fly.dev; else from the request
 
+    # reading uploaded lab reports and doctor's documents (sources/documents.py)
+    anthropic_api_key: str | None = Field(
+        default=None, validation_alias=AliasChoices("ANTHROPIC_API_KEY", "HEALTH_ANTHROPIC_API_KEY")
+    )
+    documents_model: str = "claude-opus-5-5"
+    documents_effort: str = "medium"  # low | medium | high
+
     @property
     def raw_dir(self) -> Path:
         return self.data_dir / "raw"
@@ -40,6 +48,10 @@ class Settings(BaseSettings):
     @property
     def coros_token_path(self) -> Path:
         return self.data_dir / "coros_oauth.json"
+
+    @property
+    def documents_dir(self) -> Path:
+        return self.data_dir / "documents"
 
 
 settings = Settings()

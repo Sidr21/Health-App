@@ -270,3 +270,34 @@ export const ChevronLeft = ({ size = 16, color = "#fff", strokeWidth = 2 }: Icon
     <Polyline points="15 6 9 12 15 18" {...stroke(color, strokeWidth)} />
   </Svg>
 );
+
+export const DocIcon = ({ size = 18, color = "#fff", strokeWidth = 1.8 }: IconProps) => (
+  <Svg {...base(size)}>
+    <Path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" {...stroke(color, strokeWidth)} />
+    <Polyline points="14 3 14 8 19 8" {...stroke(color, strokeWidth)} />
+    <Line x1="8.5" y1="13" x2="15.5" y2="13" {...stroke(color, strokeWidth)} />
+    <Line x1="8.5" y1="17" x2="13" y2="17" {...stroke(color, strokeWidth)} />
+  </Svg>
+);
+
+export const CameraIcon = ({ size = 18, color = "#fff", strokeWidth = 1.8 }: IconProps) => (
+  <Svg {...base(size)}>
+    <Path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.6-2h5.4l1.6 2h2.2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z" {...stroke(color, strokeWidth)} />
+    <Circle cx="12" cy="13" r="3.4" {...stroke(color, strokeWidth)} />
+  </Svg>
+);
+
+export const PhotoIcon = ({ size = 18, color = "#fff", strokeWidth = 1.8 }: IconProps) => (
+  <Svg {...base(size)}>
+    <Rect x="4" y="5" width="16" height="14" rx="2.5" {...stroke(color, strokeWidth)} />
+    <Circle cx="9" cy="10" r="1.6" {...stroke(color, strokeWidth)} />
+    <Polyline points="20 16 15 11 6 19" {...stroke(color, strokeWidth)} />
+  </Svg>
+);
+
+export const FlaskIcon = ({ size = 18, color = "#fff", strokeWidth = 1.8 }: IconProps) => (
+  <Svg {...base(size)}>
+    <Path d="M9.5 3h5M10 3v6.2L5 18a2 2 0 0 0 1.8 3h10.4A2 2 0 0 0 19 18l-5-8.8V3" {...stroke(color, strokeWidth)} />
+    <Line x1="7.2" y1="15" x2="16.8" y2="15" {...stroke(color, strokeWidth)} />
+  </Svg>
+);

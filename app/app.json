@@ -52,6 +52,14 @@
         {
           "background": true
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Health opens photos you pick of lab reports and doctor's documents so it can read them.",
+          "cameraPermission": "Health uses the camera to photograph lab reports and doctor's documents.",
+          "microphonePermission": false
+        }
       ]
     ],
     "experiments": {

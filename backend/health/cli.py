@@ -15,7 +15,9 @@ app = typer.Typer(no_args_is_help=True, help="Health app backend tools")
 coros = typer.Typer(no_args_is_help=True, help="COROS (official MCP) commands")
 db = typer.Typer(no_args_is_help=True, help="Database")
 strength = typer.Typer(no_args_is_help=True, help="Strength training (lifting) data")
+documents = typer.Typer(no_args_is_help=True, help="Lab reports and doctor's documents")
 app.add_typer(coros, name="coros")
+app.add_typer(documents, name="docs")
 app.add_typer(db, name="db")
 app.add_typer(strength, name="strength")
 
@@ -149,6 +151,49 @@ def strength_show(day: str = typer.Argument("today")) -> None:
     d = today_local() if day == "today" else date.fromisoformat(day)
     with session_scope() as s:
         typer.echo(json.dumps(strength_summary(s, d), indent=2, default=str))
+
+
+@documents.command("add")
+def docs_add(
+    paths: list[Path],
+    confirm: bool = typer.Option(
+        False, help="Confirm straight away instead of reviewing in the app"
+    ),
+) -> None:
+    """Read a PDF (or photos of one document's pages) with Claude and store the results for
+    review. Needs ANTHROPIC_API_KEY. The file stays in the data dir, never in the repo."""
+    import mimetypes
+
+    from health.db import init_db, session_scope
+    from health.models import LabResult, MedicalDocument
+    from health.sources import documents as docs
+
+    init_db()
+    files = [(p.name, mimetypes.guess_type(p.name)[0] or "", p.read_bytes()) for p in paths]
+    with session_scope() as s:
+        doc, created = docs.save_upload(s, files)
+        doc_id = doc.id
+    if not created:
+        typer.echo(f"already uploaded as document {doc_id}")
+        return
+    typer.echo(f"document {doc_id}: reading {len(files)} file(s)...")
+    docs.process(doc_id)
+    with session_scope() as s:
+        doc = s.get(MedicalDocument, doc_id)
+        if doc.status == "failed":
+            raise typer.Exit(f"failed: {doc.error}")
+        if confirm:
+            doc.status = "confirmed"
+        rows = s.query(LabResult).filter(LabResult.document_id == doc_id).all()
+        typer.echo(f"{doc.title} · {doc.provider or 'unknown provider'} · {doc.collected_on}")
+        typer.echo(doc.summary or "")
+        for r in rows:
+            shown = (
+                f"{r.value_std:g} {r.unit_std}" if r.value_std is not None else (r.value_text or "")
+            )
+            flag = f" [{r.flag}]" if r.flag not in (None, "normal") else ""
+            typer.echo(f"  {r.analyte:28} {shown}{flag}{'  ! ' + r.issue if r.issue else ''}")
+        typer.echo(f"{len(rows)} results, {doc.usage} tokens; status {doc.status}")
 
 
 @app.command()

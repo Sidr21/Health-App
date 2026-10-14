@@ -60,6 +60,9 @@ export default function RootLayout() {
             <Stack.Screen name="races" />
             <Stack.Screen name="connections" />
             <Stack.Screen name="vital/[metric]" />
+            <Stack.Screen name="labs/index" />
+            <Stack.Screen name="labs/[key]" />
+            <Stack.Screen name="labs/doc/[id]" />
           </Stack>
         </QueryClientProvider>
       </SafeAreaProvider>
