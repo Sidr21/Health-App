@@ -78,13 +78,30 @@ export default function BioAgeScreen() {
             <Dial
               progress={b?.value != null && b.age ? Math.max(0, Math.min(1, 0.5 - (b.value - b.age) / 20)) : null}
               value={b?.value != null ? b.value.toFixed(1) : "–"}
-              caption={b?.value != null ? `${signed(delta)} years vs ${b.age?.toFixed(1)}` : "Needs a few weeks of data"}
+              caption={b?.value != null ? (Math.abs(delta) < 0.05 ? "your age" : `${Math.abs(delta).toFixed(1)} years ${delta > 0 ? "older" : "younger"}`) : "Needs data"}
               color={toneOf(delta) === colors.textMuted ? colors.recovery : toneOf(delta)}
               size={200}
               stroke={12}
               hatched={b?.value == null}
             />
-            {b?.fitness_age != null ? <Text style={styles.heroSub}>Fitness age {b.fitness_age.toFixed(1)}</Text> : null}
+            {b?.value != null ? (
+              <View style={styles.ages}>
+                <View style={styles.age}>
+                  <Text style={styles.ageLabel}>YOUR AGE</Text>
+                  <Text style={styles.ageVal}>{b.age?.toFixed(1) ?? "–"}</Text>
+                </View>
+                <View style={styles.ageRule} />
+                <View style={styles.age}>
+                  <Text style={styles.ageLabel}>FITNESS AGE</Text>
+                  <Text style={styles.ageVal}>{b.fitness_age != null ? b.fitness_age.toFixed(1) : "–"}</Text>
+                </View>
+              </View>
+            ) : null}
+            {b?.fitness_age != null ? (
+              <Text style={[styles.text, { textAlign: "center" }]}>
+                Fitness age is the age at which a VO₂max of {String(b.inputs?.vo2max ?? "–")} is average, from the FRIEND treadmill registry (ours, not COROS&apos;s). It is 45% of the biological age.
+              </Text>
+            ) : null}
           </View>
 
           {b?.value != null ? (
@@ -144,6 +161,11 @@ const styles = StyleSheet.create({
   body: { paddingHorizontal: spacing.lg },
   hero: { alignItems: "center", marginBottom: spacing.lg, gap: 8 },
   heroSub: { ...font.label, color: colors.textMuted },
+  ages: { flexDirection: "row", alignItems: "center", alignSelf: "stretch", marginTop: spacing.sm },
+  age: { flex: 1, alignItems: "center", gap: 2 },
+  ageRule: { width: StyleSheet.hairlineWidth, height: 32, backgroundColor: colors.hairline },
+  ageLabel: { ...font.overline, fontSize: 10, color: colors.textFaint },
+  ageVal: { fontFamily: fonts.numeral, fontSize: 24, color: colors.text },
   card: { marginBottom: spacing.md, gap: 10 },
   text: { ...font.caption, color: colors.textMuted, lineHeight: 17 },
   method: { ...font.caption, color: colors.textFaint },
