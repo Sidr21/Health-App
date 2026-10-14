@@ -216,6 +216,19 @@ export interface RaceOut {
   predicted_s: number | null;
 }
 
+export interface SyncStateOut {
+  enabled: boolean;
+  interval_min: number;
+  running: boolean;
+  last_started: string | null;
+  last_finished: string | null;
+  last_ok: boolean | null;
+  last_error: string | null;
+  last_days: number | null;
+  next_run: string | null;
+  coros_auth: boolean;
+}
+
 export interface ValueAt {
   value: number;
   date: string;
@@ -362,6 +375,8 @@ export const api = {
   bioage: () => request<BioAgeOut>("/bioage"),
   stressDay: (date: string) => request<StressDayOut>(`/stress/${date}`),
   zones: () => request<ZonesOut>("/zones"),
+  syncState: () => request<SyncStateOut>("/sync/state"),
+  syncNow: () => request<SyncStateOut>("/sync", { method: "POST" }),
   races: () => request<RaceOut[]>("/races"),
   addRace: (body: { date: string; distance_m: number; time_s: number; name?: string }) =>
     request<RaceOut>("/races", { method: "POST", body: JSON.stringify(body) }),

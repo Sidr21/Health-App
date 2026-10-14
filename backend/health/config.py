@@ -19,6 +19,17 @@ class Settings(BaseSettings):
 
     coros_mcp_url: str = "https://mcp.coros.com/mcp"
     coros_oauth_callback_port: int = 8765
+    # contents of data/coros_oauth.json from `health coros auth` on a machine with a browser;
+    # written to the data dir on startup when no token file exists yet (cloud deploys)
+    coros_token_json: str | None = None
+
+    # background sync inside the API process (0 = off; the cloud deploy sets 15)
+    sync_interval_min: int = 0
+    sync_days: int = 3  # window of each quick sync
+    sync_full_days: int = 30  # nightly deeper sync catches late edits and missed days
+    sync_full_hour: int = 4  # local hour after which the day's deep sync runs
+    sync_fit_limit: int = 3  # new FIT downloads per run (COROS caps daily downloads)
+    docs: bool = True  # serve /docs and /openapi.json
 
     @property
     def raw_dir(self) -> Path:

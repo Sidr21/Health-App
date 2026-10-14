@@ -1,0 +1,10 @@
+# keep local health data, secrets and caches out of the build context
+data/
+.env
+.env.*
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+tests/

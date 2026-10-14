@@ -59,9 +59,56 @@ npx expo run:ios --device          # pick your iPhone; first build takes 5–15 
 
 In the app: open Settings → "Connect Apple Health & sync now", allow the body-measurement types.
 
-## 3. Cloud backend (phase 1, after the MCP auth works)
+## 3. Cloud backend (Fly.io)
+One always-on machine runs the API and the COROS sync: a quick sync of the last 3 days every
+15 minutes, plus a 30-day sync once a night after 4 am, each followed by a recompute. Settings
+in the app shows the last run and has a "Sync COROS now" button. Cost: about $3–4 a month
+(shared-cpu-1x, 512 MB, 1 GB volume); Fly asks for a card.
+
+**Before you start:** `uv run health coros auth` must have worked on the Mac, so
+`backend/data/coros_oauth.json` exists. The server can't open a browser to log in itself; it
+starts from that token and keeps refreshing it.
+
 ```bash
-docker compose up -d --build       # or deploy backend/Dockerfile to Fly.io / Railway with a volume at /data
+curl -L https://fly.io/install.sh | sh        # or: brew install flyctl
+fly auth signup                               # or: fly auth login
+cd backend
+fly launch --copy-config --no-deploy          # uses fly.toml; pick another app name if taken
+fly volumes list                              # if no health_data volume is listed:
+fly volumes create health_data --size 1 --region ewr --yes
+fly secrets set HEALTH_API_TOKEN=<your token> HEALTH_COROS_TOKEN_JSON="$(cat data/coros_oauth.json)"
+fly deploy
 ```
-Point `EXPO_PUBLIC_API_URL` at the public URL. COROS tokens live in `/data/coros_oauth.json`;
-run `health coros auth` once on the Mac and copy that file to the volume.
+
+Check it (use the app name you picked):
+```bash
+curl https://health-sidr21.fly.dev/health
+curl -H "Authorization: Bearer <your token>" https://health-sidr21.fly.dev/sync/state
+```
+The first sync starts ~20 s after boot and the first one of the day pulls 30 days. `fly logs`
+shows it running.
+
+**Bring your existing history (optional).** To start from the database you already have on the
+Mac instead of an empty one:
+```bash
+fly ssh console -C "rm -f /data/health.db"
+fly ssh sftp shell          # then:  put data/health.db /data/health.db   (Ctrl-D to leave)
+fly apps restart
+```
+
+**Point the phone at it.** In `app/.env` set `EXPO_PUBLIC_API_URL=https://health-sidr21.fly.dev`,
+then restart the dev server with `npx expo start --dev-client --clear` (the URL is baked into
+the JS bundle). The Mac no longer needs to be on.
+
+**When COROS logs you out** (Settings shows "no COROS login" or sync errors about auth): run
+`uv run health coros auth` on the Mac again, then
+```bash
+fly ssh console -C "rm /data/coros_oauth.json"
+fly secrets set HEALTH_COROS_TOKEN_JSON="$(cat data/coros_oauth.json)"   # restarts the app
+```
+The secret is only used when the server has no token file, so refreshed tokens on the volume
+are never overwritten by an old secret.
+
+Backups: Fly snapshots the volume daily (kept 5 days); `fly volumes snapshots list`.
+Anywhere else: the same image runs with Docker (`docker compose up -d --build` from the repo
+root) as long as `/data` is persistent and `HEALTH_SYNC_INTERVAL_MIN` is set.

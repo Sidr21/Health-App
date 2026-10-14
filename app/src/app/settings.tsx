@@ -7,7 +7,7 @@ import { Backdrop } from "@/components/Backdrop";
 import { DetailHeader } from "@/components/DetailHeader";
 import { SectionLabel } from "@/components/SectionLabel";
 import { Surface } from "@/components/Surface";
-import { API_URL, api, type SettingsIn, type SettingsOut } from "@/lib/api";
+import { API_URL, api, type SettingsIn, type SettingsOut, type SyncStateOut } from "@/lib/api";
 import { enableBackgroundDelivery, healthKitAvailable, requestHealthKitAccess, syncHealthKit } from "@/lib/healthkit";
 import { height as fmtHeight, setUnits } from "@/lib/units";
 import { zoneBasisLabel } from "@/lib/zones";
@@ -96,6 +96,14 @@ function HrMaxSetter({ setValue, onSave, onClear }: { setValue: number | null; o
   );
 }
 
+function syncLine(s: SyncStateOut | undefined): string {
+  if (!s) return "Background sync: unknown";
+  if (!s.enabled) return "Background sync is off on this server (it runs on the cloud deploy).";
+  if (!s.coros_auth) return "Background sync is on, but this server has no COROS login yet.";
+  const last = s.last_finished ? `last run ${ago(s.last_finished)}${s.last_ok ? "" : " (failed)"}` : "first run pending";
+  return `Syncs every ${s.interval_min} min · ${last}`;
+}
+
 function ago(iso: string | null): string {
   if (!iso) return "never";
   const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
@@ -110,6 +118,22 @@ export default function SettingsScreen() {
   const st = q.data;
   const [log, setLog] = useState("");
   const [now] = useState(() => Date.now());
+
+  const sync = useQuery({
+    queryKey: ["sync-state"],
+    queryFn: api.syncState,
+    refetchInterval: (query) => (query.state.data?.running ? 3000 : 60_000),
+  });
+  const syncNow = useMutation({
+    mutationFn: api.syncNow,
+    onSuccess: (data) => qc.setQueryData(["sync-state"], data),
+  });
+  const wasRunning = React.useRef(false);
+  React.useEffect(() => {
+    // a run just finished: everything on screen may have new data
+    if (wasRunning.current && sync.data && !sync.data.running) qc.invalidateQueries();
+    wasRunning.current = !!sync.data?.running;
+  }, [sync.data, qc]);
 
   const save = useMutation({
     mutationFn: (body: SettingsIn) => api.putSettings(body),
@@ -218,8 +242,13 @@ export default function SettingsScreen() {
           <SectionLabel title="Data sources" />
           <Surface style={styles.card}>
             <Row label="COROS" hint={`Last sync ${ago(st?.sources.coros_last_sync ?? null)} · newest workout ${ago(st?.sources.newest_activity ?? null)}`}>
-              <View style={[styles.dot, { backgroundColor: st?.sources.coros_last_sync ? colors.recovery : colors.recoveryAmber }]} />
+              <View style={[styles.dot, { backgroundColor: sync.data?.last_ok === false ? colors.recoveryRed : st?.sources.coros_last_sync ? colors.recovery : colors.recoveryAmber }]} />
             </Row>
+            <Text style={styles.hint}>{syncLine(sync.data)}</Text>
+            {sync.data?.last_error ? <Text style={[styles.hint, { color: colors.recoveryAmber }]}>{sync.data.last_error}</Text> : null}
+            <Pressable onPress={() => syncNow.mutate()} disabled={sync.data?.running || syncNow.isPending} style={[styles.btn, (sync.data?.running || syncNow.isPending) && { opacity: 0.5 }]}>
+              <Text style={styles.btnText}>{sync.data?.running ? "Syncing…" : "Sync COROS now"}</Text>
+            </Pressable>
             <Row label="Apple Health" hint={`Newest sample ${ago(st?.sources.apple_last_sample ?? null)}`}>
               <View style={[styles.dot, { backgroundColor: st?.sources.apple_last_sample ? colors.recovery : colors.textFaint }]} />
             </Row>

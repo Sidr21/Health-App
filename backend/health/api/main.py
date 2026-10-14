@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime, timedelta
@@ -46,10 +47,25 @@ from health.sources.strength_store import replace_sessions
 @asynccontextmanager
 async def _lifespan(_: FastAPI):
     init_db()
+    from health import scheduler
+
+    scheduler.seed_coros_token()
+    task = None
+    if settings.sync_interval_min > 0:
+        task = scheduler.start_background(scheduler.sync_loop())
     yield
+    if task:
+        task.cancel()
 
 
-app = FastAPI(title="Health App API", version=__version__, lifespan=_lifespan)
+app = FastAPI(
+    title="Health App API",
+    version=__version__,
+    lifespan=_lifespan,
+    docs_url="/docs" if settings.docs else None,
+    redoc_url=None,
+    openapi_url="/openapi.json" if settings.docs else None,
+)
 # The native app does not need CORS; the Expo web preview does. Auth is the bearer token.
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
@@ -239,6 +255,25 @@ def body(metric: str | None = None, limit: int = 200, s: Session = Depends(get_s
 @app.post("/ingest/apple-health", dependencies=[Depends(require_token)])
 def ingest_apple_health(payload: HKPayload, s: Session = Depends(get_session)) -> dict:
     return ingest(s, payload)
+
+
+@app.get("/sync/state", dependencies=[Depends(require_token)])
+def sync_state() -> dict:
+    """The background sync: whether it runs, the last run's outcome, and the next run."""
+    from health import scheduler
+
+    return scheduler.state.public()
+
+
+@app.post("/sync", dependencies=[Depends(require_token)])
+async def sync_now(days: int | None = Query(None, ge=1, le=90)) -> dict:
+    """Start a sync now (in the background) unless one is already running."""
+    from health import scheduler
+
+    if not scheduler.state.running:
+        scheduler.start_background(scheduler.run_once(days))
+        await asyncio.sleep(0)  # let it take the lock so the state below says running
+    return scheduler.state.public()
 
 
 @app.get("/sync/status", dependencies=[Depends(require_token)])

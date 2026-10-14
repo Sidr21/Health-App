@@ -5,6 +5,7 @@ services:
     environment:
       HEALTH_DATA_DIR: /data
       HEALTH_DATABASE_URL: sqlite:////data/health.db
+      HEALTH_SYNC_INTERVAL_MIN: "15"
     volumes:
       - health-data:/data
     ports:
