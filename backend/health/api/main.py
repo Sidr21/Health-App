@@ -24,7 +24,7 @@ from health.compute import (
     workout_detail,
     zones_payload,
 )
-from health.config import settings, today_local
+from health.config import check_public_token, settings, today_local
 from health.db import get_session, init_db
 from health.engine.muscles import MUSCLES, catalog, common_exercises
 from health.models import (
@@ -46,6 +46,7 @@ from health.sources.strength_store import replace_sessions
 
 @asynccontextmanager
 async def _lifespan(_: FastAPI):
+    check_public_token()
     init_db()
     from health import scheduler
 

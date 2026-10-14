@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     sync_full_hour: int = 4  # local hour after which the day's deep sync runs
     sync_fit_limit: int = 3  # new FIT downloads per run (COROS caps daily downloads)
     docs: bool = True  # serve /docs and /openapi.json
+    public: bool = False  # internet-facing deploy: refuse to start with a weak API token
 
     @property
     def raw_dir(self) -> Path:
@@ -51,3 +52,15 @@ def today_local():
     if settings.today is not None:
         return settings.today
     return datetime.now(ZoneInfo(settings.timezone)).date()
+
+
+WEAK_TOKENS = {"", "change-me", "change-me-to-a-long-random-string", "devtoken"}
+
+
+def check_public_token() -> None:
+    """On a public deploy the bearer token is the only lock: insist on a real one."""
+    if settings.public and (settings.api_token in WEAK_TOKENS or len(settings.api_token) < 24):
+        raise RuntimeError(
+            "HEALTH_PUBLIC is set but HEALTH_API_TOKEN is missing, a placeholder or shorter "
+            "than 24 characters: set a long random token (fly secrets set HEALTH_API_TOKEN=...)"
+        )

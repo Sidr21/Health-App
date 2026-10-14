@@ -1,5 +1,5 @@
 # Fly.io deploy for the backend: one always-on machine + a 1 GB volume for SQLite, raw files
-# and the COROS token. Steps in docs/SETUP.md §4 (the free Google Cloud setup in §3 is the default). Run `fly deploy` from this directory.
+# and the COROS token. Steps in docs/SETUP.md §3. Run `fly deploy` from this directory.
 app = "health-sidr21"            # must be unique on Fly: change it if `fly launch` says taken
 primary_region = "ewr"           # New Jersey, closest to New York
 
@@ -12,6 +12,7 @@ primary_region = "ewr"           # New Jersey, closest to New York
   HEALTH_TIMEZONE = "America/New_York"
   HEALTH_SYNC_INTERVAL_MIN = "15"
   HEALTH_DOCS = "false"
+  HEALTH_PUBLIC = "true"           # refuse to start without a strong HEALTH_API_TOKEN
   # HEALTH_API_TOKEN and HEALTH_COROS_TOKEN_JSON are secrets: `fly secrets set ...`
 
 [[mounts]]
